@@ -6,6 +6,7 @@
 // custom components at https://material.angular.dev/guide/theming
 // @use must be before @import
 @use '@angular/material' as mat;
+@use 'app/shared/styles/page-styles' as *;
 
 // Import local fonts
 @import '@fontsource/roboto/300.css';
