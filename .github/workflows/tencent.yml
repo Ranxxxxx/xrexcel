@@ -1,0 +1,42 @@
+name: Deploy to Tencent Cloud
+on:
+  push:
+    branches: [ master ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install
+      - name: Build project
+        run: npm run build
+      - name: Transfer Dist
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "./dist/pokemon-switch/browser/*"
+          # 目标路径（服务器上的路径）
+          target: "/tmp/pokemon-dist/"
+          # 递归复制目录
+          overwrite: true
+          rm: true
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            rm -rf /www/wwwroot/pokemon/
+            cp -r /tmp/pokemon-dist/dist/pokemon-switch/browser/ /www/wwwroot/pokemon/
+            rm -rf /tmp/pokemon-dist
+            systemctl restart nginx
