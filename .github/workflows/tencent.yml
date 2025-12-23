@@ -23,9 +23,9 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "./dist/pokemon-switch/browser/*"
+          source: "./dist/xrexcel/browser/*"
           # 目标路径（服务器上的路径）
-          target: "/tmp/pokemon-dist/"
+          target: "/tmp/xrexcel/"
           # 递归复制目录
           overwrite: true
           rm: true
@@ -37,6 +37,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             rm -rf /www/wwwroot/pokemon/
-            cp -r /tmp/pokemon-dist/dist/pokemon-switch/browser/ /www/wwwroot/pokemon/
-            rm -rf /tmp/pokemon-dist
+            cp -r /tmp/xrexcel/dist/xrexcel/browser/ /www/wwwroot/pokemon/
+            rm -rf /tmp/xrexcel
             systemctl restart nginx
