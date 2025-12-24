@@ -19,6 +19,8 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { TableStyleConfig, DEFAULT_TABLE_STYLE } from '../shared/models/table-style.model';
+import { TableStylePreviewComponent } from '../shared/components/table-style-preview/table-style-preview.component';
+import { ExcelUtilsService } from '../shared/services/excel-utils.service';
 import * as ExcelJS from 'exceljs';
 
 @Component({
@@ -43,7 +45,8 @@ import * as ExcelJS from 'exceljs';
     MatListModule,
     MatRadioModule,
     MatTooltipModule,
-    DragDropModule
+    DragDropModule,
+    TableStylePreviewComponent
   ],
   templateUrl: './summary-category.component.html',
   styleUrl: './summary-category.component.scss'
@@ -51,21 +54,11 @@ import * as ExcelJS from 'exceljs';
 export class SummaryCategoryComponent implements AfterViewInit {
   @ViewChild('connectionArea', { static: false }) connectionAreaRef?: ElementRef<HTMLDivElement>;
   @ViewChild('stepper', { static: false }) stepper?: MatStepper;
+  @ViewChild('summaryHeadersContainer', { static: false }) summaryHeadersContainerRef?: ElementRef<HTMLDivElement>;
+  @ViewChild('categoryHeadersContainer', { static: false }) categoryHeadersContainerRef?: ElementRef<HTMLDivElement>;
   private viewInitialized = signal<boolean>(false);
   tableStyle = signal<TableStyleConfig>({ ...DEFAULT_TABLE_STYLE });
   previewExpanded = signal<boolean>(false); // 预览区域展开状态，默认折叠
-
-  styleOptions = ['商务风格', '简约风格', '经典风格', '现代风格'];
-
-  fontOptions = ['微软雅黑', '宋体', '黑体', 'Arial', 'Times New Roman'];
-
-  fontSizeOptions = [8, 9, 10, 11, 12, 14, 16, 18, 20];
-
-  borderStyleOptions = [
-    { value: 'thin', label: '细边框' },
-    { value: 'medium', label: '中等边框' },
-    { value: 'thick', label: '粗边框' }
-  ];
 
   // Step相关数据
   selectedFile: File | null = null;
@@ -97,7 +90,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
   newCategoryFooterType = signal<'合计' | '平均值'>('合计'); // Step4新增表尾功能类型
   newCategoryFooterHeader = signal<string>(''); // Step4新增表尾功能关联的表头
 
-  constructor() {
+  constructor(private excelUtils: ExcelUtilsService) {
     // 监听映射变化，更新连接线位置
     effect(() => {
       const mappings = this.headerMappings();
@@ -105,55 +98,10 @@ export class SummaryCategoryComponent implements AfterViewInit {
         setTimeout(() => this.updateConnectionLines(), 100);
       }
     });
-
   }
 
   updateStyle(key: keyof TableStyleConfig, value: any) {
     this.tableStyle.update(config => ({ ...config, [key]: value }));
-  }
-
-  // 预览相关方法
-  getPreviewHeaders(): string[] {
-    // 如果有已选择的汇总表表头，使用它们；否则使用前3个表头或默认表头
-    if (this.summaryHeaders().length > 0) {
-      return this.summaryHeaders().slice(0, 4); // 最多显示4列
-    }
-    if (this.headers().length > 0) {
-      return this.headers().slice(0, 4);
-    }
-    return ['列1', '列2', '列3', '列4'];
-  }
-
-  getPreviewData(): string[][] {
-    // 生成示例数据行
-    const headers = this.getPreviewHeaders();
-    return [
-      headers.map((_, i) => `示例数据${i + 1}-1`),
-      headers.map((_, i) => `示例数据${i + 1}-2`),
-      headers.map((_, i) => `示例数据${i + 1}-3`)
-    ];
-  }
-
-  getPreviewTotalValue(): string {
-    return '100.00';
-  }
-
-  getPreviewTotalCells(): number[] {
-    // 返回合计行需要的单元格数量（除了第一列的"合计"标签）
-    const headers = this.getPreviewHeaders();
-    return Array.from({ length: headers.length - 1 }, (_, i) => i);
-  }
-
-  getBorderStyle(): string {
-    const style = this.tableStyle().borderStyle;
-    const color = this.tableStyle().borderColor;
-    const widthMap: Record<string, string> = {
-      'thin': '1px',
-      'medium': '2px',
-      'thick': '3px'
-    };
-    const width = widthMap[style] || '1px';
-    return `${width} solid ${color}`;
   }
 
   async onFileSelected(event: Event) {
@@ -183,139 +131,11 @@ export class SummaryCategoryComponent implements AfterViewInit {
 
   async readExcelFile(file: File) {
     try {
-      // 检查文件类型
-      const validTypes = [
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-        'application/vnd.ms-excel', // .xls
-        'application/octet-stream' // 某些浏览器可能返回这个
-      ];
-
-      if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
-        throw new Error('不支持的文件格式，请上传 .xlsx 或 .xls 文件');
-      }
-
-      const arrayBuffer = await file.arrayBuffer();
-      const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(arrayBuffer);
-
-      // 保存原始工作簿和工作表
-      this.originalWorkbook = workbook;
-
-      // 读取第一个sheet
-      const firstSheet = workbook.worksheets[0];
-      this.originalSheet = firstSheet;
-      if (!firstSheet) {
-        throw new Error('Excel文件中没有找到工作表');
-      }
-
-      // 检查sheet是否有数据
-      if (firstSheet.rowCount === 0) {
-        throw new Error('工作表为空，没有数据');
-      }
-
-      // 读取第一行作为表头，并保留其物理列索引
-      const headerRow = firstSheet.getRow(1);
-      const headers: string[] = [];
-      const colToHeaderMap = new Map<number, string>(); // 物理列号 -> 表头名
-
-      headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        let headerText = this.getCellValue(cell);
-        if (headerText) {
-          headerText = String(headerText).trim();
-          headers.push(headerText);
-          colToHeaderMap.set(colNumber, headerText);
-        }
-      });
-
-      if (headers.length === 0) {
-        throw new Error('未找到有效的表头，请确保第一行包含表头数据');
-      }
-
-      this.headers.set(headers);
-
-      // 读取所有数据行
-      const allData: any[][] = [];
-      // 添加表头行
-      allData.push(headers);
-
-      // 读取数据行（从第2行开始）
-      for (let rowNumber = 2; rowNumber <= firstSheet.rowCount; rowNumber++) {
-        const row = firstSheet.getRow(rowNumber);
-        if (!row || row.cellCount === 0) continue;
-
-        const rowData: any[] = [];
-        let hasData = false;
-
-        row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-          const cellValue = cell.value;
-          let cellText = '';
-
-          // 优先检查是否有公式：如果有公式，使用公式而不是计算结果
-          if (cell.formula) {
-            // 单元格包含公式，使用公式字符串
-            cellText = cell.formula;
-          } else if (cellValue !== null && cellValue !== undefined) {
-            if (typeof cellValue === 'string') {
-              cellText = cellValue.trim();
-            } else if (typeof cellValue === 'number') {
-              cellText = String(cellValue);
-            } else if (cellValue instanceof Date) {
-              cellText = cellValue.toLocaleDateString();
-            } else if (typeof cellValue === 'object') {
-              // 处理对象类型的值（如公式结果、超链接等）
-              // 检查对象中是否包含公式
-              if ('formula' in cellValue && (cellValue as any).formula) {
-                cellText = String((cellValue as any).formula);
-              } else if (cell.text) {
-                // 如果没有公式，使用文本值（可能是超链接文本）
-                cellText = cell.text.trim();
-              } else if ('text' in cellValue) {
-                // 如果是超链接对象，尝试获取文本
-                cellText = String((cellValue as any).text || '').trim();
-              } else {
-                // 最后才使用计算结果（如果没有公式）
-                if (cell.result !== null && cell.result !== undefined) {
-                  if (typeof cell.result === 'number') {
-                    cellText = String(cell.result);
-                  } else if (typeof cell.result === 'string') {
-                    cellText = cell.result.trim();
-                  } else {
-                    cellText = String(cell.result);
-                  }
-                } else {
-                  cellText = '';
-                }
-              }
-            } else {
-              cellText = String(cellValue).trim();
-            }
-          } else {
-            // 如果value为空，检查是否有公式
-            if (cell.formula) {
-              cellText = cell.formula;
-            } else if (cell.text) {
-              cellText = cell.text.trim();
-            } else {
-              cellText = '';
-            }
-          }
-
-          rowData.push(cellText);
-          if (cellText) hasData = true;
-        });
-
-        // 如果行数据不足表头数量，补齐空值
-        while (rowData.length < headers.length) {
-          rowData.push('');
-        }
-
-        // 只添加有数据的行
-        if (hasData) {
-          allData.push(rowData);
-        }
-      }
-
-      this.rawData = allData;
+      const result = await this.excelUtils.readExcelFile(file);
+      this.headers.set(result.headers);
+      this.rawData = result.rawData;
+      this.originalWorkbook = result.originalWorkbook;
+      this.originalSheet = result.originalSheet;
     } catch (error: any) {
       // 重新抛出错误以便上层处理
       if (error instanceof Error) {
@@ -405,9 +225,6 @@ export class SummaryCategoryComponent implements AfterViewInit {
 
   dropSummaryHeader(event: CdkDragDrop<string[]>) {
     // Step3: 拖拽排序汇总表表头
-    if (event.previousIndex === event.currentIndex) {
-      return; // 位置没有变化，不需要更新
-    }
     const headers = [...this.summaryHeaders()];
     moveItemInArray(headers, event.previousIndex, event.currentIndex);
     this.summaryHeaders.set(headers);
@@ -415,9 +232,6 @@ export class SummaryCategoryComponent implements AfterViewInit {
 
   dropCategoryTableHeader(event: CdkDragDrop<string[]>) {
     // Step4: 拖拽排序分类表表头
-    if (event.previousIndex === event.currentIndex) {
-      return; // 位置没有变化，不需要更新
-    }
     const headers = [...this.categoryTableHeaders()];
     moveItemInArray(headers, event.previousIndex, event.currentIndex);
     this.categoryTableHeaders.set(headers);
@@ -917,9 +731,16 @@ export class SummaryCategoryComponent implements AfterViewInit {
 
     // 按分类依据分组数据（保持行号关联）
     const groupedData = new Map<string, Array<{ data: any[], originalIndex: number }>>();
+    const categoryValueTypes = new Map<string, 'date' | 'string'>(); // 存储每个分类值的数据类型
 
     for (const item of deduplicatedRawData) {
       const categoryValue = item.data[categoryHeaderIndex] || '';
+
+      // 检测分类值的数据类型（检查原始 Excel 单元格）
+      if (!categoryValueTypes.has(categoryValue)) {
+        const isDate = this.isCategoryValueDate(categoryValue, item.originalIndex, categoryHeaderIndex);
+        categoryValueTypes.set(categoryValue, isDate ? 'date' : 'string');
+      }
 
       if (!groupedData.has(categoryValue)) {
         groupedData.set(categoryValue, []);
@@ -932,8 +753,9 @@ export class SummaryCategoryComponent implements AfterViewInit {
 
     // 为每个分类创建分类表工作表（先创建，以便汇总表可以引用）
     // 汇总表的分类需要去重：使用 Set 确保每个分类值只出现一次
-    const uniqueCategoryValues = Array.from(new Set(Array.from(groupedData.keys()))).sort();
-    const categoryValues = uniqueCategoryValues;
+    // 根据数据类型进行排序：日期按日期排序，其他按字母排序
+    const uniqueCategoryValues = Array.from(new Set(Array.from(groupedData.keys())));
+    const categoryValues = this.sortCategoryValues(uniqueCategoryValues, categoryValueTypes);
     const categorySheetMap = new Map<string, ExcelJS.Worksheet>(); // 存储分类表映射
 
     for (const categoryValue of categoryValues) {
@@ -947,7 +769,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
     }
 
     // 创建汇总表（传入分类表映射以便添加超链接和引用）
-    await this.createSummarySheet(summarySheet, groupedData, style, categorySheetMap, workbook);
+    await this.createSummarySheet(summarySheet, groupedData, style, categorySheetMap, workbook, categoryValueTypes);
 
     // 创建分类表（传入汇总表以便添加返回链接）
     for (const categoryValue of categoryValues) {
@@ -968,7 +790,8 @@ export class SummaryCategoryComponent implements AfterViewInit {
     groupedData: Map<string, Array<{ data: any[], originalIndex: number }>>,
     style: TableStyleConfig,
     categorySheetMap: Map<string, ExcelJS.Worksheet>,
-    workbook: ExcelJS.Workbook
+    workbook: ExcelJS.Workbook,
+    categoryValueTypes?: Map<string, 'date' | 'string'>
   ) {
     const summaryHeaders = this.summaryHeaders();
     const categoryHeader = this.categoryHeader()!;
@@ -980,46 +803,41 @@ export class SummaryCategoryComponent implements AfterViewInit {
     // 添加标题行
     const titleRow = sheet.addRow([`汇总表（按${categoryHeader}分类）`]);
     titleRow.height = 25 * 0.75; // 25像素转换为磅（1像素 ≈ 0.75磅）
-    titleRow.getCell(1).font = {
-      name: style.fontFamily,
-      size: style.titleFontSize,
-      bold: style.titleFontBold,
-      color: { argb: this.hexToArgb(style.titleFontColor) }
-    };
-    titleRow.getCell(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: this.hexToArgb(style.titleColor) }
-    };
-    titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
+    this.excelUtils.applyCellStyle(titleRow.getCell(1), style, 'title');
     sheet.mergeCells(1, 1, 1, summaryHeaders.length);
 
     // 添加表头行
     const headerRow = sheet.addRow(summaryHeaders);
     headerRow.height = 22 * 0.75; // 22像素转换为磅
     headerRow.eachCell((cell, colNumber) => {
-      cell.font = {
-        name: style.fontFamily,
-        size: style.headerFontSize,
-        bold: style.headerFontBold,
-        color: { argb: this.hexToArgb(style.headerFontColor) }
-      };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: this.hexToArgb(style.headerColor) }
-      };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
-      cell.border = {
-        top: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-        left: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-        bottom: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-        right: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } }
-      };
+      this.excelUtils.applyCellStyle(cell, style, 'header');
     });
 
     // 添加数据行
-    const categoryValues = Array.from(groupedData.keys()).sort();
+    // 根据数据类型进行排序：日期按日期排序，其他按字母排序
+    let types = categoryValueTypes;
+    if (!types) {
+      // 如果没有传入类型映射，则检测类型
+      types = new Map<string, 'date' | 'string'>();
+      const allCategoryValues = Array.from(groupedData.keys());
+      const categoryHeaderIndex = headerIndexMap.get(categoryHeader)!;
+
+      for (const categoryValue of allCategoryValues) {
+        if (!types.has(categoryValue)) {
+          // 从分组数据中查找第一个匹配的值来检测类型
+          const firstItem = groupedData.get(categoryValue)?.[0];
+          if (firstItem) {
+            const isDate = this.isCategoryValueDate(categoryValue, firstItem.originalIndex, categoryHeaderIndex);
+            types.set(categoryValue, isDate ? 'date' : 'string');
+          } else {
+            types.set(categoryValue, 'string');
+          }
+        }
+      }
+    }
+
+    const allCategoryValues = Array.from(groupedData.keys());
+    const categoryValues = this.sortCategoryValues(allCategoryValues, types);
     const mappings = this.headerMappings();
     const categoryFooterFunctions = this.categoryFooterFunctions();
     const categoryHeaderColIndex = summaryHeaders.indexOf(categoryHeader); // 分类依据列索引
@@ -1148,19 +966,17 @@ export class SummaryCategoryComponent implements AfterViewInit {
           };
         }
 
-        cell.font = cell.font || {
-          name: style.fontFamily,
-          size: style.dataFontSize,
-          bold: style.dataFontBold,
-          color: { argb: this.hexToArgb(style.dataFontColor) }
-        };
-        cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: false };
-        cell.border = {
-          top: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          left: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          bottom: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          right: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } }
-        };
+        if (!cell.font) {
+          this.excelUtils.applyCellStyle(cell, style, 'data');
+        } else {
+          // 如果已经有字体设置（如超链接），只应用边框
+          cell.border = {
+            top: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
+            left: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
+            bottom: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
+            right: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } }
+          };
+        }
       }
     }
 
@@ -1247,24 +1063,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
       const row = sheet.addRow(footerRow);
       row.height = 22 * 0.75; // 22像素转换为磅
       row.eachCell((cell, colNumber) => {
-        cell.font = {
-          name: style.fontFamily,
-          size: style.dataFontSize,
-          bold: true,
-          color: { argb: this.hexToArgb(style.dataFontColor) }
-        };
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: this.hexToArgb(style.totalColor) }
-        };
-        cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: false };
-        cell.border = {
-          top: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          left: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          bottom: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          right: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } }
-        };
+        this.excelUtils.applyCellStyle(cell, style, 'total');
       });
     }
 
@@ -1314,42 +1113,14 @@ export class SummaryCategoryComponent implements AfterViewInit {
     // 添加标题行
     const titleRow = sheet.addRow([`${categoryHeader}: ${categoryValue}`]);
     titleRow.height = 25 * 0.75; // 25像素转换为磅
-    titleRow.getCell(1).font = {
-      name: style.fontFamily,
-      size: style.titleFontSize,
-      bold: style.titleFontBold,
-      color: { argb: this.hexToArgb(style.titleFontColor) }
-    };
-    titleRow.getCell(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: this.hexToArgb(style.titleColor) }
-    };
-    titleRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
+    this.excelUtils.applyCellStyle(titleRow.getCell(1), style, 'title');
     sheet.mergeCells(2, 1, 2, categoryHeaders.length);
 
     // 添加表头行
     const headerRow = sheet.addRow(categoryHeaders);
     headerRow.height = 22 * 0.75; // 22像素转换为磅
     headerRow.eachCell((cell, colNumber) => {
-      cell.font = {
-        name: style.fontFamily,
-        size: style.headerFontSize,
-        bold: style.headerFontBold,
-        color: { argb: this.hexToArgb(style.headerFontColor) }
-      };
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: this.hexToArgb(style.headerColor) }
-      };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: false };
-      cell.border = {
-        top: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-        left: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-        bottom: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-        right: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } }
-      };
+      this.excelUtils.applyCellStyle(cell, style, 'header');
     });
 
     let currentCategoryRow = 4; // 分类表数据从第4行开始
@@ -1527,19 +1298,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
           cell.value = { formula: formula };
         }
 
-        cell.font = {
-          name: style.fontFamily,
-          size: style.dataFontSize,
-          bold: style.dataFontBold,
-          color: { argb: this.hexToArgb(style.dataFontColor) }
-        };
-        cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: false };
-        cell.border = {
-          top: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          left: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          bottom: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          right: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } }
-        };
+        this.excelUtils.applyCellStyle(cell, style, 'data');
       }
       currentCategoryRow++;
     }
@@ -1569,24 +1328,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
       const row = sheet.addRow(footerRow);
       row.height = 22 * 0.75; // 22像素转换为磅
       row.eachCell((cell, colNumber) => {
-        cell.font = {
-          name: style.fontFamily,
-          size: style.dataFontSize,
-          bold: true,
-          color: { argb: this.hexToArgb(style.dataFontColor) }
-        };
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: this.hexToArgb(style.totalColor) }
-        };
-        cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: false };
-        cell.border = {
-          top: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          left: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          bottom: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-          right: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } }
-        };
+        this.excelUtils.applyCellStyle(cell, style, 'total');
       });
     }
 
@@ -1602,106 +1344,20 @@ export class SummaryCategoryComponent implements AfterViewInit {
 
   // 自动调整列宽，确保内容不折叠、不超出
   autoFitColumns(sheet: ExcelJS.Worksheet, columnCount: number) {
-    // Excel列宽单位：1个字符宽度 ≈ 7像素（对于默认字体）
-    // 左右各20像素 = 40像素 ≈ 5.7个字符宽度
-    const paddingChars = 40 / 7; // 左右各20像素的字符宽度
-
-    for (let col = 1; col <= columnCount; col++) {
-      const column = sheet.getColumn(col);
-      let maxLength = 0;
-
-      // 遍历该列的所有单元格，找出最大内容长度
-      sheet.eachRow((row, rowNumber) => {
-        const cell = row.getCell(col);
-        let cellText = '';
-        let isNumber = false;
-
-        if (cell.value !== null && cell.value !== undefined) {
-          if (typeof cell.value === 'number') {
-            // 数字类型：按数字格式计算宽度
-            cellText = String(cell.value);
-            isNumber = true;
-          } else if (typeof cell.value === 'string') {
-            cellText = cell.value;
-          } else if (cell.value instanceof Date) {
-            cellText = cell.value.toLocaleDateString();
-          } else if (typeof cell.value === 'object' && 'text' in cell.value) {
-            cellText = (cell.value as any).text || '';
-          } else {
-            cellText = String(cell.value);
-          }
-        } else if (cell.text) {
-          cellText = cell.text;
-        }
-
-        // 计算文本长度
-        let textLength: number;
-        if (isNumber) {
-          // 数字类型：按实际字符数计算
-          textLength = cellText.length;
-        } else {
-          // 文本类型：中文字符按2个字符宽度计算
-          textLength = this.calculateTextWidth(cellText);
-        }
-        maxLength = Math.max(maxLength, textLength);
-      });
-
-      // 设置列宽 = 最大内容宽度 + 左右各20像素的空间
-      const baseWidth = maxLength + paddingChars;
-      column.width = Math.max(8, baseWidth); // 最小宽度8
-    }
-  }
-
-  // 计算文本宽度（中文字符按2个字符宽度计算）
-  calculateTextWidth(text: string): number {
-    if (!text) return 0;
-    let width = 0;
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      // 判断是否为中文字符、日文、韩文等宽字符
-      if (/[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(char)) {
-        width += 2; // 中文字符占2个字符宽度
-      } else {
-        width += 1; // 英文字符占1个字符宽度
-      }
-    }
-    return width;
+    this.excelUtils.autoFitColumns(sheet, columnCount);
   }
 
   // 将十六进制颜色转换为ARGB格式
   hexToArgb(hex: string): string {
-    hex = hex.replace('#', '');
-    if (hex.length === 3) {
-      hex = hex.split('').map(c => c + c).join('');
-    }
-    return 'FF' + hex.toUpperCase();
+    return this.excelUtils.hexToArgb(hex);
   }
-
 
   // 获取Excel列名（1 -> A, 2 -> B, 27 -> AA）
   getExcelColumnName(columnNumber: number): string {
-    let result = '';
-    while (columnNumber > 0) {
-      columnNumber--;
-      result = String.fromCharCode(65 + (columnNumber % 26)) + result;
-      columnNumber = Math.floor(columnNumber / 26);
-    }
-    return result;
-  }
-
-  // 获取单元格值
-  getCellValue(cell: ExcelJS.Cell): any {
-    if (cell.value === null || cell.value === undefined) {
-      return cell.text || '';
-    }
-    if (typeof cell.value === 'object' && 'text' in cell.value) {
-      return (cell.value as any).text || '';
-    }
-    return cell.value;
+    return this.excelUtils.getExcelColumnName(columnNumber);
   }
 
   // 转换公式：将原始数据中的公式引用转换为分类表中的引用
-  // 重要：只转换当前工作表的单元格引用，不转换其他工作表的引用（如 '汇总表'!A1）
   convertFormula(
     formula: string,
     originalRow: number,
@@ -1710,147 +1366,129 @@ export class SummaryCategoryComponent implements AfterViewInit {
     categoryCol: number,
     categoryHeaders: string[],
     headerIndexMap: Map<string, number>,
-    categoryDataRowCount: number = 0 // 分类表数据行数，用于限制行号范围
+    categoryDataRowCount: number = 0
   ): string | null {
-    try {
-      // 匹配单元格引用模式：$?列字母$?行号 或 范围引用
-      // 但不匹配前面有工作表引用的（如 '工作表名'!A1）
-      const cellRefPattern = /(\$?[A-Z]+\$?\d+(?::\$?[A-Z]+\$?\d+)?|\$?[A-Z]+:\$?[A-Z]+|\$?\d+:\$?\d+)/gi;
-
-      let convertedFormula = formula;
-      const matches = Array.from(formula.matchAll(cellRefPattern));
-
-      // 从后往前处理，避免索引变化
-      for (let i = matches.length - 1; i >= 0; i--) {
-        const match = matches[i];
-        const fullRef = match[1];
-        const matchIndex = match.index!;
-
-        // 检查前面是否有工作表引用（如 '汇总表'! 或 工作表名!）
-        // 向前查找最多50个字符，查找 '...'! 或 工作表名! 模式
-        const beforeMatch = formula.substring(Math.max(0, matchIndex - 50), matchIndex);
-
-        // 检查是否有工作表引用模式：'工作表名'! 或 工作表名!（工作表名不包含特殊字符）
-        const hasSheetRef = /'[^']*'!\s*$/.test(beforeMatch) || /[A-Za-z0-9_]+!\s*$/.test(beforeMatch);
-
-        if (hasSheetRef) {
-          // 如果前面有工作表引用，跳过这个匹配（不转换其他工作表的引用）
-          continue;
-        }
-
-        // 处理范围引用（如 A1:B2）
-        if (fullRef.includes(':')) {
-          const parts = fullRef.split(':');
-          const convertedParts = parts.map(part => this.convertSingleCellRef(part, originalRow, categoryRow, categoryHeaders, headerIndexMap, categoryDataRowCount));
-
-          if (convertedParts.some(p => p === null)) return null;
-
-          convertedFormula = convertedFormula.substring(0, matchIndex) +
-                             convertedParts.join(':') +
-                             convertedFormula.substring(matchIndex + fullRef.length);
-        } else {
-          // 处理单个单元格引用
-          const converted = this.convertSingleCellRef(fullRef, originalRow, categoryRow, categoryHeaders, headerIndexMap, categoryDataRowCount);
-          if (converted === null) return null;
-
-          convertedFormula = convertedFormula.substring(0, matchIndex) +
-                             converted +
-                             convertedFormula.substring(matchIndex + fullRef.length);
-        }
-      }
-      return convertedFormula;
-    } catch (e) {
-      console.error('转换公式失败:', e, formula);
-      return null;
-    }
+    return this.excelUtils.convertFormula(
+      formula,
+      originalRow,
+      categoryRow,
+      originalCol,
+      categoryCol,
+      categoryHeaders,
+      headerIndexMap,
+      this.originalSheet,
+      categoryDataRowCount
+    );
   }
 
-  private convertSingleCellRef(ref: string, originalRow: number, categoryRow: number, categoryHeaders: string[], headerIndexMap: Map<string, number>, categoryDataRowCount: number = 0): string | null {
-    // 提取列和行的绝对/相对引用标记
-    const isAbsoluteCol = ref.startsWith('$');
-    const parts = ref.split('$');
-    let colPart = '';
-    let rowPart = '';
+  /**
+   * 检测分类值是否为日期类型
+   * 通过检查原始 Excel 单元格的值类型来判断
+   */
+  private isCategoryValueDate(categoryValue: string, originalRowIndex: number, categoryHeaderIndex: number): boolean {
+    // 如果值为空，返回 false
+    if (!categoryValue || categoryValue.trim() === '') {
+      return false;
+    }
 
-    // 解析列部分（字母）
-    const colMatch = ref.match(/[A-Z]+/i);
-    if (colMatch) {
-      colPart = colMatch[0].toUpperCase();
-      // 检查列部分是否有绝对引用标记
-      const colIndex = ref.indexOf(colPart);
-      const beforeCol = ref.substring(0, colIndex);
-      const isColAbsolute = beforeCol.includes('$') || beforeCol === '$';
+    // 方法1: 检查原始 Excel 单元格的值类型
+    if (this.originalSheet && originalRowIndex > 0) {
+      try {
+        // 找到该表头在原表中的物理列号
+        let originalColNumber = -1;
+        const categoryHeader = this.categoryHeader();
+        this.originalSheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
+          const headerValue = String(cell.value || '').trim();
+          if (headerValue === categoryHeader) {
+            originalColNumber = col;
+          }
+        });
 
-      // 将列字母转换为列号
-      let originalColNum = 0;
-      for (let i = 0; i < colPart.length; i++) {
-        originalColNum = originalColNum * 26 + (colPart.charCodeAt(i) - 64);
-      }
+        if (originalColNumber !== -1) {
+          const cell = this.originalSheet.getRow(originalRowIndex).getCell(originalColNumber);
+          const cellValue = cell.value;
 
-      // 从原表获取该列对应的表头名称
-      let headerName = '';
-      if (this.originalSheet && originalColNum > 0) {
-        const headerCell = this.originalSheet.getRow(1).getCell(originalColNum);
-        if (headerCell && headerCell.value !== null && headerCell.value !== undefined) {
-          headerName = String(headerCell.value).trim();
-        }
-      }
+          // 检查是否为 Date 对象
+          if (cellValue instanceof Date) {
+            return true;
+          }
 
-      // 如果无法从原表获取表头名，尝试通过 headerIndexMap 查找
-      if (!headerName && headerIndexMap) {
-        const headerIndex = originalColNum - 1; // 转换为0-based索引
-        for (const [header, index] of headerIndexMap.entries()) {
-          if (index === headerIndex) {
-            headerName = header;
-            break;
+          // 检查单元格的样式格式是否包含日期格式
+          if (cell.numFmt) {
+            // Excel 日期格式通常包含 d, m, y 等字符
+            const dateFormats = ['d', 'm', 'y', 'h', 's', 'D', 'M', 'Y', 'H', 'S'];
+            const hasDateFormat = dateFormats.some(char => cell.numFmt.includes(char));
+            if (hasDateFormat && typeof cellValue === 'number') {
+              // Excel 日期是数字，但格式是日期格式
+              return true;
+            }
           }
         }
+      } catch (e) {
+        // 如果出错，继续使用字符串检测方法
+        console.debug('检测日期类型时出错:', e);
       }
-
-      // 在分类表中查找该表头对应的列位置
-      const newColIdx = categoryHeaders.indexOf(headerName);
-      if (newColIdx === -1) {
-        // 该表头不在分类表中，返回 null 表示无法转换
-        return null;
-      }
-
-      // 构建新的列引用
-      const newColRef = this.getExcelColumnName(newColIdx + 1);
-      colPart = (isColAbsolute ? '$' : '') + newColRef;
     }
 
-    // 解析行部分（数字）
-    const rowMatch = ref.match(/\d+/);
-    if (rowMatch) {
-      const originalRowNum = parseInt(rowMatch[0]);
-      const rowIndex = ref.indexOf(rowMatch[0]);
-      const beforeRow = ref.substring(0, rowIndex);
-      const isRowAbsolute = beforeRow.includes('$') || (beforeRow.endsWith('$') && !beforeRow.endsWith('$$'));
+    // 方法2: 通过字符串格式检测日期
+    // 常见的日期格式：YYYY-MM-DD, YYYY/MM/DD, MM/DD/YYYY, DD/MM/YYYY 等
+    const datePatterns = [
+      /^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/, // YYYY-MM-DD 或 YYYY/MM/DD
+      /^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/, // MM/DD/YYYY 或 DD/MM/YYYY
+      /^\d{4}\.\d{1,2}\.\d{1,2}$/, // YYYY.MM.DD
+      /^\d{1,2}\.\d{1,2}\.\d{4}$/, // DD.MM.YYYY
+    ];
 
-      let newRowNum: number;
-      if (originalRowNum === 1) {
-        // 引用表头行 -> 分类表第3行（表头行）
-        newRowNum = 3;
-      } else {
-        // 引用数据行 -> 根据相对偏移计算
-        const rowOffset = originalRowNum - originalRow;
-        newRowNum = categoryRow + rowOffset;
-        // 确保行号在有效范围内：
-        // - 最小行号：第3行（表头行）
-        // - 最大行号：第(3+categoryDataRowCount)行（最后一行数据，不包括表尾行）
-        if (newRowNum < 3) {
-          return null;
-        }
-        // 如果转换后的行号超出了数据行范围，返回 null（避免引用表尾行造成循环引用）
-        if (categoryDataRowCount > 0 && newRowNum > 3 + categoryDataRowCount) {
-          return null;
-        }
+    // 检查是否匹配日期格式
+    const matchesDatePattern = datePatterns.some(pattern => pattern.test(categoryValue.trim()));
+
+    if (matchesDatePattern) {
+      // 尝试解析为日期，如果能解析且有效，则认为是日期
+      const parsedDate = new Date(categoryValue);
+      if (!isNaN(parsedDate.getTime())) {
+        return true;
       }
-      rowPart = (isRowAbsolute ? '$' : '') + newRowNum;
     }
 
-    // 组合新的单元格引用
-    return colPart + rowPart;
+    return false;
+  }
+
+  /**
+   * 对分类值进行排序
+   * 如果是日期类型，按日期排序；否则按字母排序
+   */
+  private sortCategoryValues(
+    values: string[],
+    valueTypes: Map<string, 'date' | 'string'>
+  ): string[] {
+    return [...values].sort((a, b) => {
+      const typeA = valueTypes.get(a) || 'string';
+      const typeB = valueTypes.get(b) || 'string';
+
+      // 如果都是日期类型，按日期排序
+      if (typeA === 'date' && typeB === 'date') {
+        const dateA = new Date(a);
+        const dateB = new Date(b);
+
+        // 如果日期无效，按字符串排序
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+          return a.localeCompare(b, 'zh-CN');
+        }
+
+        return dateA.getTime() - dateB.getTime();
+      }
+
+      // 如果一个是日期一个是字符串，日期排在前面
+      if (typeA === 'date' && typeB === 'string') {
+        return -1;
+      }
+      if (typeA === 'string' && typeB === 'date') {
+        return 1;
+      }
+
+      // 都是字符串，按字母排序（支持中文）
+      return a.localeCompare(b, 'zh-CN');
+    });
   }
 }
 
