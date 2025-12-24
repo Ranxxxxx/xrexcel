@@ -3,170 +3,19 @@
     <button mat-icon-button [routerLink]="'/'">
       <mat-icon>arrow_back</mat-icon>
     </button>
-    <span class="toolbar-title">单表格分块合计</span>
+    <span class="toolbar-title">单表格处理</span>
     <span class="spacer"></span>
     <mat-icon>table_chart</mat-icon>
   </mat-toolbar>
 
   <div class="page-content">
-    <mat-card class="settings-card">
-      <mat-card-header>
-        <mat-card-title>
-          <mat-icon class="header-icon">palette</mat-icon>
-          表格风格设置
-        </mat-card-title>
-        <mat-card-subtitle>自定义表格的外观样式和格式</mat-card-subtitle>
-      </mat-card-header>
-
-      <mat-card-content>
-        <div class="settings-container">
-          <mat-expansion-panel class="settings-section">
-            <mat-expansion-panel-header>
-              <mat-panel-title>
-                <mat-icon>style</mat-icon>
-                基础样式
-              </mat-panel-title>
-            </mat-expansion-panel-header>
-
-            <div class="settings-grid">
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>表格风格</mat-label>
-                <mat-select [value]="tableStyle().style" (selectionChange)="updateStyle('style', $event.value)">
-                  @for (style of styleOptions; track style) {
-                    <mat-option [value]="style">{{ style }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>字体选择</mat-label>
-                <mat-select [value]="tableStyle().fontFamily" (selectionChange)="updateStyle('fontFamily', $event.value)">
-                  @for (font of fontOptions; track font) {
-                    <mat-option [value]="font">{{ font }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-            </div>
-          </mat-expansion-panel>
-
-          <mat-expansion-panel class="settings-section">
-            <mat-expansion-panel-header>
-              <mat-panel-title>
-                <mat-icon>color_lens</mat-icon>
-                颜色设置
-              </mat-panel-title>
-            </mat-expansion-panel-header>
-
-            <div class="settings-grid">
-              <div class="color-setting">
-                <mat-form-field appearance="outline">
-                  <mat-label>标题栏颜色</mat-label>
-                  <input matInput type="text" [value]="tableStyle().titleColor" (input)="updateStyle('titleColor', $any($event.target).value)">
-                </mat-form-field>
-                <input type="color" [value]="tableStyle().titleColor" (change)="updateStyle('titleColor', $any($event.target).value)" class="color-picker">
-              </div>
-
-              <div class="color-setting">
-                <mat-form-field appearance="outline">
-                  <mat-label>表头颜色</mat-label>
-                  <input matInput type="text" [value]="tableStyle().headerColor" (input)="updateStyle('headerColor', $any($event.target).value)">
-                </mat-form-field>
-                <input type="color" [value]="tableStyle().headerColor" (change)="updateStyle('headerColor', $any($event.target).value)" class="color-picker">
-              </div>
-
-              <div class="color-setting">
-                <mat-form-field appearance="outline">
-                  <mat-label>合计颜色</mat-label>
-                  <input matInput type="text" [value]="tableStyle().totalColor" (input)="updateStyle('totalColor', $any($event.target).value)">
-                </mat-form-field>
-                <input type="color" [value]="tableStyle().totalColor" (change)="updateStyle('totalColor', $any($event.target).value)" class="color-picker">
-              </div>
-
-              <div class="color-setting">
-                <mat-form-field appearance="outline">
-                  <mat-label>边框颜色</mat-label>
-                  <input matInput type="text" [value]="tableStyle().borderColor" (input)="updateStyle('borderColor', $any($event.target).value)">
-                </mat-form-field>
-                <input type="color" [value]="tableStyle().borderColor" (change)="updateStyle('borderColor', $any($event.target).value)" class="color-picker">
-              </div>
-            </div>
-          </mat-expansion-panel>
-
-          <mat-expansion-panel class="settings-section">
-            <mat-expansion-panel-header>
-              <mat-panel-title>
-                <mat-icon>text_fields</mat-icon>
-                字体设置
-              </mat-panel-title>
-            </mat-expansion-panel-header>
-
-            <div class="settings-grid">
-              <div class="font-setting">
-                <mat-form-field appearance="outline">
-                  <mat-label>标题字体大小</mat-label>
-                  <mat-select [value]="tableStyle().titleFontSize" (selectionChange)="updateStyle('titleFontSize', $event.value)">
-                    @for (size of fontSizeOptions; track size) {
-                      <mat-option [value]="size">{{ size }} 号</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-                <mat-checkbox [checked]="tableStyle().titleFontBold" (change)="updateStyle('titleFontBold', $event.checked)">
-                  加粗
-                </mat-checkbox>
-              </div>
-
-              <div class="font-setting">
-                <mat-form-field appearance="outline">
-                  <mat-label>表头字体大小</mat-label>
-                  <mat-select [value]="tableStyle().headerFontSize" (selectionChange)="updateStyle('headerFontSize', $event.value)">
-                    @for (size of fontSizeOptions; track size) {
-                      <mat-option [value]="size">{{ size }} 号</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-                <mat-checkbox [checked]="tableStyle().headerFontBold" (change)="updateStyle('headerFontBold', $event.checked)">
-                  加粗
-                </mat-checkbox>
-              </div>
-
-              <div class="font-setting">
-                <mat-form-field appearance="outline">
-                  <mat-label>数据字体大小</mat-label>
-                  <mat-select [value]="tableStyle().dataFontSize" (selectionChange)="updateStyle('dataFontSize', $event.value)">
-                    @for (size of fontSizeOptions; track size) {
-                      <mat-option [value]="size">{{ size }} 号</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
-                <mat-checkbox [checked]="tableStyle().dataFontBold" (change)="updateStyle('dataFontBold', $event.checked)">
-                  加粗
-                </mat-checkbox>
-              </div>
-            </div>
-          </mat-expansion-panel>
-
-          <mat-expansion-panel class="settings-section">
-            <mat-expansion-panel-header>
-              <mat-panel-title>
-                <mat-icon>border_style</mat-icon>
-                边框设置
-              </mat-panel-title>
-            </mat-expansion-panel-header>
-
-            <div class="settings-grid">
-              <mat-form-field appearance="outline" class="full-width">
-                <mat-label>边框样式</mat-label>
-                <mat-select [value]="tableStyle().borderStyle" (selectionChange)="updateStyle('borderStyle', $event.value)">
-                  @for (style of borderStyleOptions; track style.value) {
-                    <mat-option [value]="style.value">{{ style.label }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-            </div>
-          </mat-expansion-panel>
-        </div>
-      </mat-card-content>
-    </mat-card>
+    <app-table-style-preview
+      [tableStyle]="tableStyle()"
+      [previewData]="previewData"
+      [previewExpanded]="previewExpanded()"
+      (styleChange)="updateStyle($event.key, $event.value)"
+      (previewExpandedChange)="previewExpanded.set($event)">
+    </app-table-style-preview>
 
     <mat-card class="content-card">
       <mat-card-header>
@@ -176,11 +25,434 @@
         </mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <div class="content-placeholder">
-          <mat-icon class="placeholder-icon">pending</mat-icon>
-          <p>内容区域待补充</p>
-        </div>
+        <mat-stepper [linear]="true" #stepper>
+          <!-- Step 1: 上传文件 -->
+          <mat-step>
+            <ng-template matStepLabel>上传Excel文件</ng-template>
+            <div class="step-content">
+              <div class="upload-area">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  (change)="onFileSelected($event)"
+                  #fileInput
+                  id="file-input"
+                  style="display: none;">
+                <button mat-raised-button color="primary" type="button" (click)="fileInput.click()">
+                  <mat-icon>cloud_upload</mat-icon>
+                  选择Excel文件
+                </button>
+                @if (selectedFile) {
+                  <div class="file-info">
+                    <mat-icon>description</mat-icon>
+                    <span>{{ selectedFile.name }}</span>
+                  </div>
+                }
+                @if (isUploading()) {
+                  <mat-progress-bar mode="indeterminate" class="upload-progress"></mat-progress-bar>
+                }
+              </div>
+              @if (sheetNames().length > 0) {
+                <div class="step-actions">
+                  <button mat-raised-button color="primary" (click)="stepper.next()">
+                    下一步
+                    <mat-icon>arrow_forward</mat-icon>
+                  </button>
+                </div>
+              }
+            </div>
+          </mat-step>
+
+          <!-- Step 2: 选择修改的Sheet -->
+          <mat-step>
+            <ng-template matStepLabel>选择修改的Sheet</ng-template>
+            <div class="step-content">
+              <p class="step-description">请选择是否批量修改：</p>
+              <div class="radio-group-container">
+                <mat-radio-group [value]="isBatchMode() ? 'batch' : 'single'" (change)="onBatchModeRadioChange($event)">
+                  <mat-radio-button value="single">单个修改</mat-radio-button>
+                  <mat-radio-button value="batch">批量修改</mat-radio-button>
+                </mat-radio-group>
+                @if (isBatchMode()) {
+                  <mat-checkbox
+                    [checked]="isSelectAll()"
+                    (change)="toggleSelectAll()"
+                    [indeterminate]="selectedSheets().length > 0 && selectedSheets().length < sheetNames().length"
+                    class="select-all-checkbox">
+                    全选
+                  </mat-checkbox>
+                }
+              </div>
+
+              <div class="sheet-selection-container">
+                <div class="sheet-chips-container">
+                  @for (sheetName of sheetNames(); track sheetName) {
+                    <mat-chip
+                      [class.selected]="isSheetSelected(sheetName)"
+                      (click)="toggleSheet(sheetName)">
+                      @if (isSheetSelected(sheetName)) {
+                        <mat-icon class="check-icon">check</mat-icon>
+                      }
+                      {{ sheetName }}
+                    </mat-chip>
+                  }
+                </div>
+              </div>
+
+              <div class="step-actions">
+                <button mat-button (click)="stepper.previous()">
+                  <mat-icon>arrow_back</mat-icon>
+                  上一步
+                </button>
+                @if (selectedSheets().length > 0) {
+                  <button mat-raised-button color="primary" (click)="stepper.next()">
+                    下一步
+                    <mat-icon>arrow_forward</mat-icon>
+                  </button>
+                }
+              </div>
+            </div>
+          </mat-step>
+
+          <!-- Step 3: 选择表头 -->
+          <mat-step (interacted)="onStep3Enter()">
+            <ng-template matStepLabel>选择表头</ng-template>
+            <div class="step-content">
+              <p class="step-description">请输入表头的行数：</p>
+              <div class="header-row-input-container">
+                <mat-form-field appearance="outline">
+                  <mat-label>表头行数</mat-label>
+                  <input
+                    matInput
+                    type="number"
+                    min="1"
+                    [value]="headerRowCount()"
+                    (input)="headerRowCount.set(+($any($event.target).value) || 1)"
+                    (blur)="onHeaderRowCountChange()">
+                </mat-form-field>
+              </div>
+
+              @if (headersData().length > 0) {
+                <div class="headers-display-container">
+                  @for (item of headersData(); track item.sheetName) {
+                    <div class="sheet-headers-section">
+                      <h4 class="sheet-headers-title">
+                        <mat-icon>table_chart</mat-icon>
+                        {{ item.sheetName }}
+                      </h4>
+                      <div class="headers-table-container">
+                        <table class="headers-table">
+                          <tbody>
+                            @for (headerRow of item.headers; track $index) {
+                              <tr>
+                                @for (header of headerRow; track $index) {
+                                  <td>{{ header || '(空)' }}</td>
+                                }
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  }
+                </div>
+              } @else {
+                <div class="no-headers-message">
+                  <mat-icon>info</mat-icon>
+                  <span>请先输入表头行数</span>
+                </div>
+              }
+
+              <div class="step-actions">
+                <button mat-button (click)="stepper.previous()">
+                  <mat-icon>arrow_back</mat-icon>
+                  上一步
+                </button>
+                @if (headersData().length > 0) {
+                  <button mat-raised-button color="primary" (click)="stepper.next()">
+                    下一步
+                    <mat-icon>arrow_forward</mat-icon>
+                  </button>
+                }
+              </div>
+            </div>
+          </mat-step>
+
+          <!-- Step 4: 选择功能 -->
+          <mat-step>
+            <ng-template matStepLabel>选择功能</ng-template>
+            <div class="step-content">
+              <p class="step-description">请添加需要执行的功能：</p>
+
+              <!-- 添加功能选择器 -->
+              <div class="add-function-container">
+                <mat-form-field appearance="outline">
+                  <mat-label>选择功能</mat-label>
+                  <mat-select (selectionChange)="addFunction($event.value); $event.source.value = null">
+                    @for (func of availableFunctionsForSelection; track func.value) {
+                      <mat-option [value]="func.value">{{ func.label }}</mat-option>
+                    }
+                    @if (availableFunctionsForSelection.length === 0) {
+                      <mat-option disabled>所有功能已添加</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+
+              <!-- 功能列表 -->
+              @if (functionConfigs().length > 0) {
+                <div class="functions-list">
+                  @for (config of functionConfigs(); track config.id) {
+                    <mat-expansion-panel class="function-panel">
+                      <mat-expansion-panel-header>
+                        <mat-panel-title>
+                          <mat-icon>{{ config.type === 'modifyHeader' ? 'edit' : config.type === 'modifyFooter' ? 'format_list_bulleted' : config.type === 'categorySummary' ? 'category' : 'sort' }}</mat-icon>
+                          {{ getFunctionLabel(config.type) }}
+                        </mat-panel-title>
+                        <mat-panel-description>
+                          <button
+                            mat-icon-button
+                            (click)="removeFunction(config.id); $event.stopPropagation()"
+                            class="remove-function-btn">
+                            <mat-icon>delete</mat-icon>
+                          </button>
+                        </mat-panel-description>
+                      </mat-expansion-panel-header>
+
+                      <!-- 修改表头功能 -->
+                      @if (config.type === 'modifyHeader') {
+                        <div class="function-content">
+                          <p class="function-description">可以添加、删除、修改表头，也可以拖拽排序：</p>
+                          <div class="headers-list-container">
+                            <div
+                              cdkDropList
+                              (cdkDropListDropped)="dropHeaderInModifyHeader($event, config.id)"
+                              class="headers-drop-list">
+                              @for (header of config.modifiedHeaders; track $index) {
+                                <div
+                                  cdkDrag
+                                  class="header-item draggable-chip">
+                                  <mat-icon cdkDragHandle class="drag-handle">drag_indicator</mat-icon>
+                                  <input
+                                    matInput
+                                    [value]="header"
+                                    (input)="updateHeaderInModifyHeader(config.id, $index, $any($event.target).value)"
+                                    class="header-input">
+                                  <button
+                                    mat-icon-button
+                                    (click)="removeHeaderFromModifyHeader(config.id, $index)"
+                                    class="remove-header-btn">
+                                    <mat-icon>close</mat-icon>
+                                  </button>
+                                </div>
+                              }
+                            </div>
+                            <button
+                              mat-stroked-button
+                              (click)="addHeaderToModifyHeader(config.id)"
+                              class="add-header-btn">
+                              <mat-icon>add</mat-icon>
+                              添加表头
+                            </button>
+                          </div>
+                        </div>
+                      }
+
+                      <!-- 修改表尾功能 -->
+                      @if (config.type === 'modifyFooter') {
+                        <div class="function-content">
+                          <p class="function-description">选择需要在表尾进行合计的表头：</p>
+                          <div class="footer-headers-container">
+                            @for (header of currentAvailableHeaders; track header) {
+                              <mat-chip
+                                [class.selected]="isHeaderInFooter(config.id, header)"
+                                (click)="toggleFooterHeader(config.id, header)"
+                                class="selectable-chip">
+                                {{ header }}
+                                @if (isHeaderInFooter(config.id, header)) {
+                                  <mat-icon class="check-icon">check</mat-icon>
+                                }
+                              </mat-chip>
+                            }
+                          </div>
+                          @if (config.footerHeaders.length > 0) {
+                            <div class="selected-headers-info">
+                              <p>已选择 {{ config.footerHeaders.length }} 个表头：</p>
+                              <div class="selected-chips">
+                                @for (header of config.footerHeaders; track header) {
+                                  <mat-chip>{{ header }}</mat-chip>
+                                }
+                              </div>
+                            </div>
+                          }
+                        </div>
+                      }
+
+                      <!-- 分类合计功能 -->
+                      @if (config.type === 'categorySummary') {
+                        <div class="function-content">
+                          <p class="function-description">选择一个表头作为分类依据，再选择需要合计的表头：</p>
+                          <div class="category-summary-container">
+                            <div class="category-header-section">
+                              <h4>分类依据：</h4>
+                              <mat-form-field appearance="outline">
+                                <mat-label>选择分类表头</mat-label>
+                                <mat-select [value]="config.categoryHeader" (selectionChange)="setCategoryHeader(config.id, $event.value)">
+                                  <mat-option value="">-- 请选择 --</mat-option>
+                                  @for (header of currentAvailableHeaders; track header) {
+                                    <mat-option [value]="header">{{ header }}</mat-option>
+                                  }
+                                </mat-select>
+                              </mat-form-field>
+                            </div>
+                            <div class="summary-headers-section">
+                              <h4>合计表头：</h4>
+                              <div class="summary-headers-container">
+                                @for (header of currentAvailableHeaders; track header) {
+                                  @if (header !== config.categoryHeader) {
+                                    <mat-chip
+                                      [class.selected]="isHeaderInSummary(config.id, header)"
+                                      (click)="toggleSummaryHeader(config.id, header)"
+                                      class="selectable-chip">
+                                      {{ header }}
+                                      @if (isHeaderInSummary(config.id, header)) {
+                                        <mat-icon class="check-icon">check</mat-icon>
+                                      }
+                                    </mat-chip>
+                                  }
+                                }
+                              </div>
+                              @if (config.summaryHeaders.length > 0) {
+                                <div class="selected-headers-info">
+                                  <p>已选择 {{ config.summaryHeaders.length }} 个合计表头：</p>
+                                  <div class="selected-chips">
+                                    @for (header of config.summaryHeaders; track header) {
+                                      <mat-chip>{{ header }}</mat-chip>
+                                    }
+                                  </div>
+                                </div>
+                              }
+                            </div>
+                          </div>
+                        </div>
+                      }
+
+                      <!-- 排序功能 -->
+                      @if (config.type === 'sort') {
+                        <div class="function-content">
+                          <p class="function-description">添加排序规则，可以按多个表头排序：</p>
+                          <div class="sort-rules-container">
+                            @for (sortRule of config.sortHeaders; track $index) {
+                              <div class="sort-rule-item">
+                                <mat-form-field appearance="outline" class="sort-header-field">
+                                  <mat-label>表头</mat-label>
+                                  <mat-select
+                                    [value]="sortRule.header"
+                                    (selectionChange)="updateSortRule(config.id, $index, $event.value, sortRule.order)">
+                                    @for (header of currentAvailableHeaders; track header) {
+                                      <mat-option [value]="header">{{ header }}</mat-option>
+                                    }
+                                  </mat-select>
+                                </mat-form-field>
+                                <mat-form-field appearance="outline" class="sort-order-field">
+                                  <mat-label>排序方式</mat-label>
+                                  <mat-select
+                                    [value]="sortRule.order"
+                                    (selectionChange)="updateSortRule(config.id, $index, sortRule.header, $event.value)">
+                                    <mat-option value="asc">升序</mat-option>
+                                    <mat-option value="desc">降序</mat-option>
+                                  </mat-select>
+                                </mat-form-field>
+                                <button
+                                  mat-icon-button
+                                  (click)="removeSortRule(config.id, $index)"
+                                  class="remove-sort-btn">
+                                  <mat-icon>delete</mat-icon>
+                                </button>
+                              </div>
+                            }
+                            <button
+                              mat-stroked-button
+                              (click)="addSortRule(config.id)"
+                              [disabled]="config.sortHeaders.length >= currentAvailableHeaders.length"
+                              class="add-sort-btn">
+                              <mat-icon>add</mat-icon>
+                              添加排序规则
+                            </button>
+                          </div>
+                        </div>
+                      }
+                    </mat-expansion-panel>
+                  }
+                </div>
+              } @else {
+                <div class="no-functions-message">
+                  <mat-icon>info</mat-icon>
+                  <span>请添加功能</span>
+                </div>
+              }
+
+              <div class="step-actions">
+                <button mat-button (click)="stepper.previous()" [disabled]="isProcessing()">
+                  <mat-icon>arrow_back</mat-icon>
+                  上一步
+                </button>
+                @if (functionConfigs().length > 0) {
+                  <button mat-raised-button color="primary" (click)="onComplete()" [disabled]="isProcessing()">
+                    @if (isProcessing()) {
+                      <mat-icon>hourglass_empty</mat-icon>
+                    } @else {
+                      <mat-icon>check</mat-icon>
+                    }
+                    @if (isProcessing()) {
+                      处理中...
+                    } @else {
+                      完成
+                    }
+                  </button>
+                }
+              </div>
+            </div>
+          </mat-step>
+        </mat-stepper>
       </mat-card-content>
     </mat-card>
   </div>
+
+  <!-- 确认对话框 -->
+  @if (showConfirmDialog()) {
+    <div class="dialog-overlay" [class.no-close]="generationProgress() > 0" (click)="generationProgress() === 0 && closeConfirmDialog()">
+      <mat-card class="confirm-dialog" (click)="$event.stopPropagation()">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>info</mat-icon>
+            确认信息
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="dialog-content">
+          @if (generationProgress() === 0) {
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>文件名</mat-label>
+              <input matInput [value]="outputFileName()" (input)="outputFileName.set($any($event.target).value)" placeholder="请输入文件名">
+            </mat-form-field>
+          } @else {
+            <div class="progress-container">
+              <p class="progress-text">正在生成文件，请稍候...</p>
+              <mat-progress-bar mode="determinate" [value]="generationProgress()"></mat-progress-bar>
+              <p class="progress-percent">{{ generationProgress().toFixed(0) }}%</p>
+            </div>
+          }
+        </mat-card-content>
+        <mat-card-actions class="dialog-actions" align="end">
+          @if (generationProgress() === 0) {
+            <button mat-button (click)="closeConfirmDialog()">取消</button>
+            <button mat-raised-button color="primary" (click)="startGeneration()" [disabled]="!outputFileName().trim()">
+              <mat-icon>play_arrow</mat-icon>
+              开始生成文件
+            </button>
+          }
+        </mat-card-actions>
+      </mat-card>
+    </div>
+  }
 </div>

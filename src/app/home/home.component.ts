@@ -29,10 +29,10 @@ export class HomeComponent {
     },
     {
       id: 'single-table-block',
-      title: '单表格分块合计',
+      title: '单表格处理',
       route: '/single-table-block',
       icon: 'table_chart',
-      description: '对单个表格进行分块并计算合计'
+      description: '对Excel单个表格进行处理'
     },
     {
       id: 'multi-table-merge',
