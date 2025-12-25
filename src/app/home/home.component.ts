@@ -1,10 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { PrivacyNoticeComponent } from '../shared/components/privacy-notice/privacy-notice.component';
+import { VersionService } from '../shared/services/version.service';
 
 @Component({
   selector: 'app-home',
@@ -20,8 +21,14 @@ import { PrivacyNoticeComponent } from '../shared/components/privacy-notice/priv
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss'
 })
-export class HomeComponent {
-  version = '0.0.1'; // 版本号，与package.json保持一致
+export class HomeComponent implements OnInit {
+  private versionService = inject(VersionService);
+  version = signal<string>(''); // 从 package.json 读取版本号
+
+  async ngOnInit() {
+    const version = await this.versionService.getVersion();
+    this.version.set(version);
+  }
 
   features = [
     {
