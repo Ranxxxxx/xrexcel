@@ -52,9 +52,23 @@
                     <mat-icon>data_object</mat-icon>
                     数据源
                   </h4>
+                  <div class="data-source-type-selector">
+                    <mat-radio-group [value]="dataSourceType()" (change)="dataSourceType.set($event.value)">
+                      <mat-radio-button value="table">
+                        <span>表格</span>
+                        <span class="radio-description">合并表格</span>
+                      </mat-radio-button>
+                      <mat-radio-button value="zip">
+                        <span>压缩包</span>
+                        <span class="radio-description">将文件附加到表格</span>
+                      </mat-radio-button>
+                    </mat-radio-group>
+                  </div>
                   <app-file-upload
                     [selectedFile]="dataSourceFile()"
                     [isUploading]="isUploadingDataSourceFile()"
+                    [accept]="dataSourceType() === 'table' ? '.xlsx,.xls' : '.zip,.rar,.7z'"
+                    [buttonText]="dataSourceType() === 'table' ? '选择Excel文件' : '选择压缩包文件'"
                     (fileSelected)="onDataSourceFileSelected($event)">
                   </app-file-upload>
                 </div>
@@ -147,78 +161,139 @@
                   }
                 </div>
 
-                <!-- 右侧：数据源sheet选择 -->
+                <!-- 右侧：数据源sheet选择或zip文件树 -->
                 @if (shouldShowDataSourceSection()) {
-                  <div class="merge-target-section">
-                    <h4 class="section-title">
-                      <mat-icon>data_object</mat-icon>
-                      数据源Sheet
-                    </h4>
-                    <p class="section-description">选择数据源Sheet（可多选）：</p>
+                  @if (dataSourceType() === 'zip' && shouldShowZipFileTree()) {
+                    <!-- Zip文件树 -->
+                    <div class="merge-target-section">
+                      <h4 class="section-title">
+                        <mat-icon>folder</mat-icon>
+                        压缩包文件
+                      </h4>
+                      <p class="section-description">选择需要附加的文件（可多选）：</p>
 
-                    <!-- 多选下拉框 -->
-                    <mat-form-field appearance="outline" class="sheet-select-field">
-                      <mat-label>选择Sheet</mat-label>
-                      <mat-select
-                        [value]="selectedDataSourceSheets()"
-                        (selectionChange)="onDataSourceSheetsSelectionChange($event.value)"
-                        multiple>
-                        <!-- 全选选项 -->
-                        <mat-option (click)="$event.stopPropagation(); toggleSelectAllDataSourceSheets()" class="select-all-option">
-                          <mat-checkbox
-                            [checked]="isAllDataSourceSheetsSelected()"
-                            [indeterminate]="selectedDataSourceSheets().length > 0 && !isAllDataSourceSheetsSelected()"
-                            (click)="$event.stopPropagation()">
-                          </mat-checkbox>
-                          <span>全选</span>
-                        </mat-option>
-                        <mat-divider></mat-divider>
-                        <!-- Sheet选项 -->
-                        @for (sheetName of dataSourceSheetNames(); track sheetName) {
-                          <mat-option [value]="sheetName">
-                            {{ sheetName }}
-                          </mat-option>
+                      <div class="zip-file-tree-container">
+                        @if (zipTreeDataSource.data && zipTreeDataSource.data.length > 0) {
+                          <mat-tree [dataSource]="zipTreeDataSource" [treeControl]="zipTreeControl">
+                            <!-- 文件节点模板（叶子节点） -->
+                            <mat-tree-node *matTreeNodeDef="let node; when: !hasChild" matTreeNodePadding>
+                              @if (node) {
+                                <div class="zip-tree-node">
+                                  <div
+                                    class="zip-file-item"
+                                    [class.selected]="isZipFileSelected(node.path)"
+                                    (click)="toggleZipFileSelection(node.path)">
+                                    <mat-checkbox
+                                      [checked]="isZipFileSelected(node.path)"
+                                      (click)="$event.stopPropagation()">
+                                    </mat-checkbox>
+                                    <mat-icon class="file-icon">description</mat-icon>
+                                    <span class="file-name">{{ node.name }}</span>
+                                  </div>
+                                </div>
+                              }
+                            </mat-tree-node>
+
+                            <!-- 文件夹节点模板（有子节点） -->
+                            <mat-nested-tree-node *matTreeNodeDef="let node; when: hasChild">
+                              @if (node) {
+                                <div class="zip-tree-node">
+                                  <button mat-icon-button matTreeNodeToggle>
+                                    <mat-icon class="folder-toggle-icon">
+                                      {{ zipTreeControl.isExpanded(node) ? 'expand_more' : 'chevron_right' }}
+                                    </mat-icon>
+                                  </button>
+                                  <mat-icon class="folder-icon">folder</mat-icon>
+                                  <span class="folder-name">{{ node.name }}</span>
+                                </div>
+                                <div [class.zip-tree-invisible]="!zipTreeControl.isExpanded(node)" class="zip-tree-children">
+                                  <ng-container matTreeNodeOutlet></ng-container>
+                                </div>
+                              }
+                            </mat-nested-tree-node>
+                          </mat-tree>
                         }
-                      </mat-select>
-                    </mat-form-field>
-
-                    @if (selectedDataSourceSheets().length > 0) {
-                      <div class="selected-count">
-                        已选择 {{ selectedDataSourceSheets().length }} 个Sheet
-                      </div>
-                      <div class="header-row-input">
-                        <mat-form-field appearance="outline">
-                          <mat-label>表头所在行数</mat-label>
-                          <input
-                            matInput
-                            type="number"
-                            [value]="dataSourceHeaderRow()"
-                            (input)="dataSourceHeaderRow.set(+($any($event.target).value))"
-                            (change)="onDataSourceHeaderRowChange()"
-                            min="1">
-                        </mat-form-field>
                       </div>
 
-                      <!-- 显示表头 -->
-                      @if (dataSourceHeaders().length > 0) {
-                        <div class="headers-display-section">
-                          <p class="section-description">选择需要合并的表头（可多选）：</p>
-                          <div class="headers-chips-container">
-                            @for (header of dataSourceHeaders(); track header) {
-                              <mat-chip
-                                [class.selected]="selectedHeaders().includes(header)"
-                                (click)="toggleHeader(header)">
-                                @if (selectedHeaders().includes(header)) {
-                                  <mat-icon>check</mat-icon>
-                                }
-                                {{ header }}
-                              </mat-chip>
-                            }
-                          </div>
+                      @if (selectedZipFiles().length > 0) {
+                        <div class="selected-count">
+                          已选择 {{ selectedZipFiles().length }} 个文件
                         </div>
                       }
-                    }
-                  </div>
+                    </div>
+                  } @else {
+                    <!-- Excel Sheet选择 -->
+                    <div class="merge-target-section">
+                      <h4 class="section-title">
+                        <mat-icon>data_object</mat-icon>
+                        数据源Sheet
+                      </h4>
+                      <p class="section-description">选择数据源Sheet（可多选）：</p>
+
+                      <!-- 多选下拉框 -->
+                      <mat-form-field appearance="outline" class="sheet-select-field">
+                        <mat-label>选择Sheet</mat-label>
+                        <mat-select
+                          [value]="selectedDataSourceSheets()"
+                          (selectionChange)="onDataSourceSheetsSelectionChange($event.value)"
+                          multiple>
+                          <!-- 全选选项 -->
+                          <mat-option (click)="$event.stopPropagation(); toggleSelectAllDataSourceSheets()" class="select-all-option">
+                            <mat-checkbox
+                              [checked]="isAllDataSourceSheetsSelected()"
+                              [indeterminate]="selectedDataSourceSheets().length > 0 && !isAllDataSourceSheetsSelected()"
+                              (click)="$event.stopPropagation()">
+                            </mat-checkbox>
+                            <span>全选</span>
+                          </mat-option>
+                          <mat-divider></mat-divider>
+                          <!-- Sheet选项 -->
+                          @for (sheetName of dataSourceSheetNames(); track sheetName) {
+                            <mat-option [value]="sheetName">
+                              {{ sheetName }}
+                            </mat-option>
+                          }
+                        </mat-select>
+                      </mat-form-field>
+
+                      @if (selectedDataSourceSheets().length > 0) {
+                        <div class="selected-count">
+                          已选择 {{ selectedDataSourceSheets().length }} 个Sheet
+                        </div>
+                        <div class="header-row-input">
+                          <mat-form-field appearance="outline">
+                            <mat-label>表头所在行数</mat-label>
+                            <input
+                              matInput
+                              type="number"
+                              [value]="dataSourceHeaderRow()"
+                              (input)="dataSourceHeaderRow.set(+($any($event.target).value))"
+                              (change)="onDataSourceHeaderRowChange()"
+                              min="1">
+                          </mat-form-field>
+                        </div>
+
+                        <!-- 显示表头 -->
+                        @if (dataSourceHeaders().length > 0) {
+                          <div class="headers-display-section">
+                            <p class="section-description">选择需要合并的表头（可多选）：</p>
+                            <div class="headers-chips-container">
+                              @for (header of dataSourceHeaders(); track header) {
+                                <mat-chip
+                                  [class.selected]="selectedHeaders().includes(header)"
+                                  (click)="toggleHeader(header)">
+                                  @if (selectedHeaders().includes(header)) {
+                                    <mat-icon>check</mat-icon>
+                                  }
+                                  {{ header }}
+                                </mat-chip>
+                              }
+                            </div>
+                          </div>
+                        }
+                      }
+                    </div>
+                  }
                 }
               </div>
 
@@ -248,7 +323,20 @@
                   <mat-icon>arrow_back</mat-icon>
                   上一步
                 </button>
-                @if (shouldShowHeaderSortSection()) {
+                @if (shouldShowCompleteInStep2()) {
+                  <button mat-raised-button color="primary" (click)="onComplete()" [disabled]="isProcessing()">
+                    @if (isProcessing()) {
+                      <mat-icon>hourglass_empty</mat-icon>
+                    } @else {
+                      <mat-icon>check</mat-icon>
+                    }
+                    @if (isProcessing()) {
+                      处理中...
+                    } @else {
+                      完成
+                    }
+                  </button>
+                } @else if (shouldShowNextInStep2()) {
                   <button mat-raised-button color="primary" (click)="stepper.next()">
                     下一步
                     <mat-icon>arrow_forward</mat-icon>

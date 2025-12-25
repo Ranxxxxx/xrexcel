@@ -21,6 +21,7 @@ export class FileUploadComponent {
   selectedFile = input<File | null>(null);
   isUploading = input<boolean>(false);
   accept = input<string>('.xlsx,.xls');
+  buttonText = input<string>('选择Excel文件');
 
   // 输出事件
   fileSelected = output<File>();

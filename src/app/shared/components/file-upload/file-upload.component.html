@@ -8,7 +8,7 @@
     style="display: none;">
   <button mat-raised-button color="primary" type="button" (click)="triggerFileInput(fileInput)">
     <mat-icon>cloud_upload</mat-icon>
-    选择Excel文件
+    {{ buttonText() }}
   </button>
   @if (selectedFile()) {
     <div class="file-info">

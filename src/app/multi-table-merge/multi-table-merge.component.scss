@@ -44,6 +44,40 @@
   }
 }
 
+.data-source-type-selector {
+  margin-bottom: 1rem;
+
+  mat-radio-group {
+    display: flex;
+    flex-direction: row;
+    gap: 2rem;
+
+    mat-radio-button {
+      ::ng-deep {
+        .mdc-form-field__label {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.25rem;
+        }
+      }
+
+      span {
+        font-size: 0.95rem;
+        color: var(--mat-sys-on-surface);
+        font-weight: 500;
+      }
+
+      .radio-description {
+        font-size: 0.85rem;
+        color: var(--mat-sys-on-surface-variant);
+        font-weight: 400;
+        margin-left: 0;
+      }
+    }
+  }
+}
+
 // Step 2 样式
 .merge-target-container {
   display: grid;
@@ -86,6 +120,125 @@
     margin: 0;
     color: var(--mat-sys-on-surface-variant);
     font-size: 0.9rem;
+  }
+}
+
+// Zip文件树样式
+.zip-file-tree-container {
+  max-height: 500px;
+  overflow-y: auto;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 4px;
+  padding: 0.5rem;
+  background: var(--mat-sys-surface-container);
+
+  mat-tree {
+    background: transparent;
+  }
+
+  .zip-tree-node {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+
+    .zip-folder-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      font-weight: 500;
+      color: var(--mat-sys-on-surface);
+      width: 100%;
+
+      button {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+      }
+
+      .folder-toggle-icon {
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+      }
+
+      .folder-icon {
+        color: var(--mat-sys-primary);
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+      }
+
+      .folder-name {
+        font-size: 0.95rem;
+      }
+    }
+
+    .zip-file-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      width: 100%;
+
+      &:hover {
+        background: var(--mat-sys-surface-container-high);
+      }
+
+      &.selected {
+        background: var(--mat-sys-primary-container);
+        color: var(--mat-sys-on-primary-container);
+      }
+
+      mat-checkbox {
+        flex-shrink: 0;
+      }
+
+      .file-icon {
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+      }
+
+      .file-name {
+        font-size: 0.9rem;
+        word-break: break-all;
+      }
+
+      &.selected .file-icon {
+        color: var(--mat-sys-on-primary-container);
+      }
+    }
+  }
+
+  .zip-tree-children {
+    overflow: hidden;
+    transition: max-height 0.3s ease-out;
+
+    &.zip-tree-invisible {
+      display: none;
+    }
+  }
+
+  // CDK Tree 的 padding 样式
+  ::ng-deep {
+    .mat-mdc-tree-node {
+      min-height: 40px;
+    }
+
+    .mat-mdc-tree-node[matTreeNodePadding] {
+      padding-left: 0;
+    }
+
+    .mat-mdc-nested-tree-node {
+      padding-left: 0;
+    }
   }
 }
 
