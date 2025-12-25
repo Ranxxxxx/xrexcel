@@ -15,7 +15,7 @@ export class TableStyleStorageService {
     try {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(style));
     } catch (error) {
-      console.error('保存表格风格配置失败:', error);
+      // 保存失败，静默处理
     }
   }
 
@@ -29,7 +29,7 @@ export class TableStyleStorageService {
         return JSON.parse(stored) as TableStyleConfig;
       }
     } catch (error) {
-      console.error('加载表格风格配置失败:', error);
+      // 加载失败，返回null
     }
     return null;
   }
@@ -48,7 +48,7 @@ export class TableStyleStorageService {
     try {
       localStorage.removeItem(this.STORAGE_KEY);
     } catch (error) {
-      console.error('重置表格风格配置失败:', error);
+      // 重置失败，静默处理
     }
   }
 

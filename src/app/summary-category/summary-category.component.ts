@@ -22,7 +22,6 @@ import { TableStyleConfig, DEFAULT_TABLE_STYLE } from '../shared/models/table-st
 import { TableStylePreviewComponent } from '../shared/components/table-style-preview/table-style-preview.component';
 import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/confirm-dialog.component';
 import { FileUploadComponent } from '../shared/components/file-upload/file-upload.component';
-import { PrivacyNoticeComponent } from '../shared/components/privacy-notice/privacy-notice.component';
 import { ExcelUtilsService } from '../shared/services/excel-utils.service';
 import { TableStyleStorageService } from '../shared/services/table-style-storage.service';
 import * as ExcelJS from 'exceljs';
@@ -52,8 +51,7 @@ import * as ExcelJS from 'exceljs';
     DragDropModule,
     TableStylePreviewComponent,
     ConfirmDialogComponent,
-    FileUploadComponent,
-    PrivacyNoticeComponent
+    FileUploadComponent
   ],
   templateUrl: './summary-category.component.html',
   styleUrl: './summary-category.component.scss'
@@ -151,7 +149,6 @@ export class SummaryCategoryComponent implements AfterViewInit {
     try {
       await this.readExcelFile(this.selectedFile);
     } catch (error: any) {
-      console.error('读取Excel文件失败:', error);
       const errorMessage = error?.message || '未知错误';
       alert(`读取Excel文件失败：${errorMessage}\n\n请确保：\n1. 文件格式为 .xlsx\n2. 文件未损坏\n3. 文件包含至少一个工作表`);
     } finally {
@@ -720,7 +717,6 @@ export class SummaryCategoryComponent implements AfterViewInit {
         this.isProcessing.set(false);
       }, 300);
     } catch (error: any) {
-      console.error('生成Excel失败:', error);
       alert(`生成Excel失败：${error?.message || '未知错误'}`);
       this.closeConfirmDialog();
       this.isProcessing.set(false);
@@ -1681,7 +1677,6 @@ export class SummaryCategoryComponent implements AfterViewInit {
         }
       } catch (e) {
         // 如果出错，继续使用字符串检测方法
-        console.debug('检测日期类型时出错:', e);
       }
     }
 

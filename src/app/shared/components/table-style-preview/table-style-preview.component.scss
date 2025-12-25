@@ -1,3 +1,5 @@
+@use '../../styles/page-styles.scss' as *;
+
 // 设置卡片样式
 .settings-card {
   mat-card-header {
@@ -147,6 +149,3 @@
 .full-width {
   width: 100%;
 }
-
-@import '../../styles/page-styles.scss';
-

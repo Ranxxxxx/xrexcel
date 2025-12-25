@@ -294,6 +294,142 @@ export class ExcelUtilsService {
   }
 
   /**
+   * 读取Excel工作表的表头
+   * @param sheet Excel工作表
+   * @param headerRow 表头所在行号（从1开始）
+   * @param includeEmpty 是否包含空单元格
+   * @returns 表头数组
+   */
+  readSheetHeaders(sheet: ExcelJS.Worksheet, headerRow: number = 1, includeEmpty: boolean = false): string[] {
+    const headers: string[] = [];
+    const headerRowObj = sheet.getRow(headerRow);
+    if (!headerRowObj) return headers;
+
+    headerRowObj.eachCell({ includeEmpty }, (cell) => {
+      // 对于表头，使用cell.text获取显示的文本，而不是cell.value（避免日期对象等被错误转换）
+      const headerText = cell.text || (cell.value ? String(cell.value).trim() : '');
+      if (headerText && headerText.trim() && !headers.includes(headerText.trim())) {
+        headers.push(headerText.trim());
+      }
+    });
+
+    return headers;
+  }
+
+  /**
+   * 读取多个Excel工作表的表头（合并去重）
+   * @param workbook Excel工作簿
+   * @param sheetNames 工作表名称数组
+   * @param headerRow 表头所在行号（从1开始）
+   * @param includeEmpty 是否包含空单元格
+   * @returns 表头数组
+   */
+  readMultipleSheetHeaders(
+    workbook: ExcelJS.Workbook,
+    sheetNames: string[],
+    headerRow: number = 1,
+    includeEmpty: boolean = false
+  ): string[] {
+    const headers: string[] = [];
+    const headerSet = new Set<string>();
+
+    for (const sheetName of sheetNames) {
+      const sheet = workbook.getWorksheet(sheetName);
+      if (sheet) {
+        const sheetHeaders = this.readSheetHeaders(sheet, headerRow, includeEmpty);
+        sheetHeaders.forEach(header => {
+          if (!headerSet.has(header)) {
+            headerSet.add(header);
+            headers.push(header);
+          }
+        });
+      }
+    }
+
+    return headers;
+  }
+
+  /**
+   * 读取表头并创建列号到表头名的映射
+   * @param sheet Excel工作表
+   * @param headerRow 表头所在行号（从1开始）
+   * @param includeEmpty 是否包含空单元格
+   * @returns 列号到表头名的映射（Map<列号, 表头名>）
+   */
+  readHeadersMap(
+    sheet: ExcelJS.Worksheet,
+    headerRow: number = 1,
+    includeEmpty: boolean = true
+  ): Map<number, string> {
+    const headersMap = new Map<number, string>();
+    const headerRowObj = sheet.getRow(headerRow);
+    if (!headerRowObj) return headersMap;
+
+    headerRowObj.eachCell({ includeEmpty }, (cell, colNumber) => {
+      // 对于表头，使用cell.text获取显示的文本，而不是cell.value（避免日期对象等被错误转换）
+      const headerText = cell.text || (cell.value ? String(cell.value).trim() : '');
+      if (headerText && headerText.trim()) {
+        headersMap.set(colNumber, headerText.trim());
+      }
+    });
+
+    return headersMap;
+  }
+
+  /**
+   * 获取单元格值（包括公式）
+   * @param cell Excel单元格
+   * @param sheet Excel工作表（可选，用于公式计算）
+   * @param rowNumber 行号（可选）
+   * @param colNumber 列号（可选）
+   * @returns 单元格值或公式对象
+   */
+  getCellValueWithFormula(
+    cell: ExcelJS.Cell,
+    sheet?: ExcelJS.Worksheet,
+    rowNumber?: number,
+    colNumber?: number
+  ): any {
+    // 检查是否是公式
+    if (cell.formula) {
+      return { formula: cell.formula };
+    }
+
+    // 检查value是否是公式对象
+    if (typeof cell.value === 'object' && cell.value !== null && 'formula' in cell.value) {
+      return cell.value;
+    }
+
+    // 返回普通值
+    return this.getCellValue(cell);
+  }
+
+  /**
+   * 从单元格引用中提取表头名称
+   * @param ref 单元格引用（如 "A1", "$B$2"）
+   * @param headersMap 列号到表头名的映射
+   * @returns 表头名称，如果找不到则返回null
+   */
+  extractHeaderNameFromRef(ref: string, headersMap: Map<number, string>): string | null {
+    const colMatch = ref.match(/[A-Z]+/i);
+    if (!colMatch) return null;
+
+    const colPart = colMatch[0].toUpperCase();
+    // 将列字母转换为列号（1-based）
+    let originalColNum = 0;
+    for (let i = 0; i < colPart.length; i++) {
+      originalColNum = originalColNum * 26 + (colPart.charCodeAt(i) - 64);
+    }
+
+    // 查找原始列对应的表头名称
+    if (headersMap.has(originalColNum)) {
+      return headersMap.get(originalColNum)!;
+    }
+
+    return null;
+  }
+
+  /**
    * 转换公式：将原始数据中的公式引用转换为分类表中的引用
    * 重要：只转换当前工作表的单元格引用，不转换其他工作表的引用（如 '汇总表'!A1）
    */
@@ -375,7 +511,6 @@ export class ExcelUtilsService {
       }
       return convertedFormula;
     } catch (e) {
-      console.error('转换公式失败:', e, formula);
       return null;
     }
   }

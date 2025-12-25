@@ -321,9 +321,219 @@
                   <mat-icon>arrow_back</mat-icon>
                   上一步
                 </button>
-                <button mat-raised-button color="primary" (click)="onComplete()">
-                  完成
-                  <mat-icon>check</mat-icon>
+                <button mat-raised-button color="primary" (click)="stepper.next()">
+                  下一步
+                  <mat-icon>arrow_forward</mat-icon>
+                </button>
+              </div>
+            </div>
+          </mat-step>
+
+          <!-- Step 4: 关联更新汇总表 -->
+          <mat-step>
+            <ng-template matStepLabel>关联更新汇总表</ng-template>
+            <div class="step-content">
+              <div class="update-summary-section">
+                <h4 class="section-title">
+                  <mat-icon>update</mat-icon>
+                  是否更新汇总表
+                </h4>
+                <mat-radio-group [value]="updateSummaryTable() ? 'yes' : 'no'" (change)="updateSummaryTable.set($event.value === 'yes')">
+                  <mat-radio-button value="yes" class="radio-option">
+                    <span>是</span>
+                  </mat-radio-button>
+                  <mat-radio-button value="no" class="radio-option">
+                    <span>否</span>
+                  </mat-radio-button>
+                </mat-radio-group>
+              </div>
+
+              @if (updateSummaryTable()) {
+                <div class="summary-table-config">
+                  <!-- 选择汇总表sheet -->
+                  <div class="summary-sheet-section">
+                    <h4 class="section-title">
+                      <mat-icon>folder</mat-icon>
+                      选择汇总表Sheet
+                    </h4>
+                    <mat-form-field appearance="outline" class="sheet-select-field">
+                      <mat-label>选择Sheet</mat-label>
+                      <mat-select
+                        [value]="selectedSummarySheet()"
+                        (selectionChange)="selectedSummarySheet.set($event.value); onSummarySheetChange()">
+                        <mat-option value="">-- 请选择Sheet --</mat-option>
+                        @for (sheetName of baseSheetNames(); track sheetName) {
+                          <mat-option [value]="sheetName">
+                            {{ sheetName }}
+                          </mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  </div>
+
+                  @if (selectedSummarySheet()) {
+                    <!-- 表头行数设置 -->
+                    <div class="summary-header-row-section">
+                      <h4 class="section-title">
+                        <mat-icon>view_headline</mat-icon>
+                        表头设置
+                      </h4>
+                      <mat-form-field appearance="outline">
+                        <mat-label>表头所在行数</mat-label>
+                        <input
+                          matInput
+                          type="number"
+                          [value]="summaryHeaderRow()"
+                          (input)="summaryHeaderRow.set(+($any($event.target).value))"
+                          (change)="onSummarySheetChange()"
+                          min="1">
+                      </mat-form-field>
+                    </div>
+
+                    <!-- 汇总表表头列表 -->
+                    @if (summaryHeaders().length > 0) {
+                      <div class="summary-headers-section">
+                        <h4 class="section-title">
+                          <mat-icon>list</mat-icon>
+                          汇总表表头（可拖拽排序，点击删除按钮移除）
+                        </h4>
+                        <div class="header-chips-container" cdkDropList cdkDropListOrientation="mixed" (cdkDropListDropped)="dropSummaryHeader($event)">
+                          @for (header of summaryHeaders(); track header) {
+                            <mat-chip cdkDrag (removed)="removeSummaryHeader(header)">
+                              {{ header }}
+                              <button matChipRemove>
+                                <mat-icon>cancel</mat-icon>
+                              </button>
+                            </mat-chip>
+                          }
+                        </div>
+                      </div>
+                    }
+
+                    <!-- 新增表头 -->
+                    <div class="add-header-section">
+                      <mat-form-field appearance="outline">
+                        <mat-label>新增表头</mat-label>
+                        <input matInput [value]="newSummaryHeaderName()" (input)="newSummaryHeaderName.set($any($event.target).value)" placeholder="输入新表头名称" (keyup.enter)="addNewSummaryHeader()">
+                        <button mat-icon-button matSuffix (click)="addNewSummaryHeader()" [disabled]="!newSummaryHeaderName().trim()">
+                          <mat-icon>add</mat-icon>
+                        </button>
+                      </mat-form-field>
+                    </div>
+
+                    <!-- 关联功能 -->
+                    @if (summaryHeaders().length > 0 && sortedHeaders().length > 0) {
+                      <div class="header-mapping-section">
+                        <h4 class="section-title">
+                          <mat-icon>link</mat-icon>
+                          表头关联
+                        </h4>
+                        <p class="section-description">选择汇总表表头和合并表表头进行关联，再次选择可取消关联：</p>
+                        <div class="header-mapping-container">
+                          <!-- 左侧：汇总表表头 -->
+                          <div class="header-column summary-headers-column">
+                            <h3 class="column-title">
+                              <mat-icon>table_chart</mat-icon>
+                              汇总表
+                            </h3>
+                            <div class="header-list-mapping">
+                              @for (header of summaryHeaders(); track header) {
+                                <div
+                                  class="mapping-header-item"
+                                  [class.selected]="isSummaryHeaderSelectedForMapping(header)"
+                                  [class.mapped]="isSummaryHeaderMapped(header)"
+                                  (click)="selectSummaryHeaderForMapping(header)"
+                                  [attr.data-header-id]="'summary-' + header">
+                                  <mat-chip [class.selected-chip]="isSummaryHeaderSelectedForMapping(header)" [class.mapped-chip]="isSummaryHeaderMapped(header)">
+                                    {{ header }}
+                                    @if (isSummaryHeaderMapped(header)) {
+                                      <mat-icon class="link-icon">link</mat-icon>
+                                    }
+                                  </mat-chip>
+                                </div>
+                              }
+                            </div>
+                          </div>
+
+                          <!-- 中间：连接线区域 -->
+                          <div class="connection-area" #connectionArea>
+                            @for (mapping of headerMappings() | keyvalue; track mapping.key) {
+                              <div
+                                class="connection-line"
+                                [attr.data-summary]="mapping.key"
+                                [attr.data-merged]="mapping.value">
+                              </div>
+                            }
+                          </div>
+
+                          <!-- 右侧：合并表选项（表头和表尾功能） -->
+                          <div class="header-column merged-headers-column">
+                            <h3 class="column-title">
+                              <mat-icon>merge_type</mat-icon>
+                              合并表
+                            </h3>
+                            <div class="header-list-mapping">
+                              @for (option of getMergedTableOptions(); track option.id) {
+                                <div
+                                  class="mapping-header-item"
+                                  [class.mapped]="isMergedTableOptionMapped(option.id)"
+                                  [class.footer-option]="option.type === 'footer'"
+                                  (click)="selectMergedTableOptionForMapping(option.id)"
+                                  [attr.data-header-id]="'merged-' + option.id">
+                                  <mat-chip [class.mapped-chip]="isMergedTableOptionMapped(option.id)">
+                                    @if (option.icon) {
+                                      <mat-icon class="footer-icon">{{ option.icon }}</mat-icon>
+                                    }
+                                    {{ option.label }}
+                                    @if (isMergedTableOptionMapped(option.id)) {
+                                      <mat-icon class="link-icon">link</mat-icon>
+                                    }
+                                  </mat-chip>
+                                </div>
+                              }
+                            </div>
+                          </div>
+                        </div>
+
+                        @if (headerMappings().size > 0) {
+                          <div class="mapping-summary">
+                            <p>已建立 {{ headerMappings().size }} 个关联：</p>
+                            <div class="mapping-list">
+                              @for (mapping of headerMappings() | keyvalue; track mapping.key) {
+                                <div class="mapping-item">
+                                  <span class="mapping-from">{{ mapping.key }}</span>
+                                  <mat-icon>arrow_forward</mat-icon>
+                                  <span class="mapping-to">{{ getMergedTableOptionLabel(mapping.value) }}</span>
+                                  <button mat-icon-button (click)="removeMapping(mapping.key)" matTooltip="取消关联">
+                                    <mat-icon>close</mat-icon>
+                                  </button>
+                                </div>
+                              }
+                            </div>
+                          </div>
+                        }
+                      </div>
+                    }
+                  }
+                </div>
+              }
+
+              <div class="step-actions">
+                <button mat-button (click)="stepper.previous()" [disabled]="isProcessing()">
+                  <mat-icon>arrow_back</mat-icon>
+                  上一步
+                </button>
+                <button mat-raised-button color="primary" (click)="onComplete()" [disabled]="isProcessing()">
+                  @if (isProcessing()) {
+                    <mat-icon>hourglass_empty</mat-icon>
+                  } @else {
+                    <mat-icon>check</mat-icon>
+                  }
+                  @if (isProcessing()) {
+                    处理中...
+                  } @else {
+                    完成
+                  }
                 </button>
               </div>
             </div>
@@ -343,7 +553,4 @@
     (close)="closeConfirmDialog()"
     (confirm)="startGeneration()">
   </app-confirm-dialog>
-
-  <!-- 隐私说明 -->
-  <!-- <app-privacy-notice></app-privacy-notice> -->
 </div>
