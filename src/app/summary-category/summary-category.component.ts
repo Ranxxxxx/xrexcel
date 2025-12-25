@@ -22,6 +22,7 @@ import { TableStyleConfig, DEFAULT_TABLE_STYLE } from '../shared/models/table-st
 import { TableStylePreviewComponent } from '../shared/components/table-style-preview/table-style-preview.component';
 import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/confirm-dialog.component';
 import { FileUploadComponent } from '../shared/components/file-upload/file-upload.component';
+import { PrivacyNoticeComponent } from '../shared/components/privacy-notice/privacy-notice.component';
 import { ExcelUtilsService } from '../shared/services/excel-utils.service';
 import { TableStyleStorageService } from '../shared/services/table-style-storage.service';
 import * as ExcelJS from 'exceljs';
@@ -51,7 +52,8 @@ import * as ExcelJS from 'exceljs';
     DragDropModule,
     TableStylePreviewComponent,
     ConfirmDialogComponent,
-    FileUploadComponent
+    FileUploadComponent,
+    PrivacyNoticeComponent
   ],
   templateUrl: './summary-category.component.html',
   styleUrl: './summary-category.component.scss'
@@ -568,11 +570,11 @@ export class SummaryCategoryComponent implements AfterViewInit {
       return this.getPreviewDataForSummaryTable();
     }
 
-    // 未上传文件时，返回示例预览数据
+    // 未选择文件时，返回示例预览数据
     return this.getDefaultPreviewData();
   }
 
-  // 获取默认预览数据（未上传文件时使用）
+  // 获取默认预览数据（未选择文件时使用）
   getDefaultPreviewData(): any[][] {
     return this.excelUtils.getDefaultPreviewData();
   }
@@ -668,7 +670,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
   // Step5: 完成按钮点击处理
   onComplete() {
     if (!this.selectedFile) {
-      alert('请先上传Excel文件');
+      alert('请先选择Excel文件');
       return;
     }
 

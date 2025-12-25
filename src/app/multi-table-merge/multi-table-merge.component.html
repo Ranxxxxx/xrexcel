@@ -28,11 +28,322 @@
         </mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <div class="content-placeholder">
-          <mat-icon class="placeholder-icon">pending</mat-icon>
-          <p>内容区域待补充</p>
-        </div>
+        <mat-stepper [linear]="true" #stepper>
+          <!-- Step 1: 选择文件 -->
+          <mat-step>
+            <ng-template matStepLabel>选择文件</ng-template>
+            <div class="step-content">
+              <div class="upload-files-container">
+                <!-- 左侧：基础文件 -->
+                <div class="upload-file-section">
+                  <h4 class="section-title">
+                    <mat-icon>folder</mat-icon>
+                    基础文件
+                  </h4>
+                  <app-file-upload
+                    [selectedFile]="baseFile()"
+                    [isUploading]="isUploadingBaseFile()"
+                    (fileSelected)="onBaseFileSelected($event)">
+                  </app-file-upload>
+                </div>
+                <!-- 右侧：数据源 -->
+                <div class="upload-file-section">
+                  <h4 class="section-title">
+                    <mat-icon>data_object</mat-icon>
+                    数据源
+                  </h4>
+                  <app-file-upload
+                    [selectedFile]="dataSourceFile()"
+                    [isUploading]="isUploadingDataSourceFile()"
+                    (fileSelected)="onDataSourceFileSelected($event)">
+                  </app-file-upload>
+                </div>
+              </div>
+              @if (canProceedToStep2()) {
+                <div class="step-actions">
+                  <button mat-raised-button color="primary" (click)="stepper.next()">
+                    下一步
+                    <mat-icon>arrow_forward</mat-icon>
+                  </button>
+                </div>
+              }
+            </div>
+          </mat-step>
+
+          <!-- Step 2: 设置合并目标 -->
+          <mat-step>
+            <ng-template matStepLabel>设置合并目标</ng-template>
+            <div class="step-content">
+              <div class="merge-target-container">
+                <!-- 左侧：基础文件sheet选择 -->
+                <div class="merge-target-section">
+                  <h4 class="section-title">
+                    <mat-icon>folder</mat-icon>
+                    基础文件Sheet
+                  </h4>
+                  <p class="section-description">选择需要合并的Sheet（可多选）：</p>
+
+                  <!-- 多选下拉框 -->
+                  <mat-form-field appearance="outline" class="sheet-select-field">
+                    <mat-label>选择Sheet</mat-label>
+                    <mat-select
+                      [value]="selectedBaseSheets()"
+                      (selectionChange)="onBaseSheetsSelectionChange($event.value)"
+                      multiple>
+                      <!-- 全选选项 -->
+                      <mat-option (click)="$event.stopPropagation(); toggleSelectAllBaseSheets()" class="select-all-option">
+                        <mat-checkbox
+                          [checked]="isAllBaseSheetsSelected()"
+                          [indeterminate]="selectedBaseSheets().length > 0 && !isAllBaseSheetsSelected()"
+                          (click)="$event.stopPropagation()">
+                        </mat-checkbox>
+                        <span>全选</span>
+                      </mat-option>
+                      <mat-divider></mat-divider>
+                      <!-- Sheet选项 -->
+                      @for (sheetName of baseSheetNames(); track sheetName) {
+                        <mat-option [value]="sheetName">
+                          {{ sheetName }}
+                        </mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+
+                  @if (selectedBaseSheets().length > 0) {
+                    <div class="selected-count">
+                      已选择 {{ selectedBaseSheets().length }} 个Sheet
+                    </div>
+                    <div class="header-row-input">
+                      <mat-form-field appearance="outline">
+                        <mat-label>表头所在行数</mat-label>
+                        <input
+                          matInput
+                          type="number"
+                          [value]="baseHeaderRow()"
+                          (input)="baseHeaderRow.set(+($any($event.target).value))"
+                          (change)="onBaseHeaderRowChange()"
+                          min="1">
+                      </mat-form-field>
+                    </div>
+
+                    <!-- 显示表头 -->
+                    @if (baseHeaders().length > 0) {
+                      <div class="headers-display-section">
+                        <p class="section-description">选择需要合并的表头（可多选）：</p>
+                        <div class="headers-chips-container">
+                          @for (header of baseHeaders(); track header) {
+                            <mat-chip
+                              [class.selected]="selectedHeaders().includes(header)"
+                              (click)="toggleHeader(header)">
+                              @if (selectedHeaders().includes(header)) {
+                                <mat-icon>check</mat-icon>
+                              }
+                              {{ header }}
+                            </mat-chip>
+                          }
+                        </div>
+                      </div>
+                    }
+                  }
+                </div>
+
+                <!-- 右侧：数据源sheet选择 -->
+                @if (shouldShowDataSourceSection()) {
+                  <div class="merge-target-section">
+                    <h4 class="section-title">
+                      <mat-icon>data_object</mat-icon>
+                      数据源Sheet
+                    </h4>
+                    <p class="section-description">选择数据源Sheet（可多选）：</p>
+
+                    <!-- 多选下拉框 -->
+                    <mat-form-field appearance="outline" class="sheet-select-field">
+                      <mat-label>选择Sheet</mat-label>
+                      <mat-select
+                        [value]="selectedDataSourceSheets()"
+                        (selectionChange)="onDataSourceSheetsSelectionChange($event.value)"
+                        multiple>
+                        <!-- 全选选项 -->
+                        <mat-option (click)="$event.stopPropagation(); toggleSelectAllDataSourceSheets()" class="select-all-option">
+                          <mat-checkbox
+                            [checked]="isAllDataSourceSheetsSelected()"
+                            [indeterminate]="selectedDataSourceSheets().length > 0 && !isAllDataSourceSheetsSelected()"
+                            (click)="$event.stopPropagation()">
+                          </mat-checkbox>
+                          <span>全选</span>
+                        </mat-option>
+                        <mat-divider></mat-divider>
+                        <!-- Sheet选项 -->
+                        @for (sheetName of dataSourceSheetNames(); track sheetName) {
+                          <mat-option [value]="sheetName">
+                            {{ sheetName }}
+                          </mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+
+                    @if (selectedDataSourceSheets().length > 0) {
+                      <div class="selected-count">
+                        已选择 {{ selectedDataSourceSheets().length }} 个Sheet
+                      </div>
+                      <div class="header-row-input">
+                        <mat-form-field appearance="outline">
+                          <mat-label>表头所在行数</mat-label>
+                          <input
+                            matInput
+                            type="number"
+                            [value]="dataSourceHeaderRow()"
+                            (input)="dataSourceHeaderRow.set(+($any($event.target).value))"
+                            (change)="onDataSourceHeaderRowChange()"
+                            min="1">
+                        </mat-form-field>
+                      </div>
+
+                      <!-- 显示表头 -->
+                      @if (dataSourceHeaders().length > 0) {
+                        <div class="headers-display-section">
+                          <p class="section-description">选择需要合并的表头（可多选）：</p>
+                          <div class="headers-chips-container">
+                            @for (header of dataSourceHeaders(); track header) {
+                              <mat-chip
+                                [class.selected]="selectedHeaders().includes(header)"
+                                (click)="toggleHeader(header)">
+                                @if (selectedHeaders().includes(header)) {
+                                  <mat-icon>check</mat-icon>
+                                }
+                                {{ header }}
+                              </mat-chip>
+                            }
+                          </div>
+                        </div>
+                      }
+                    }
+                  </div>
+                }
+              </div>
+
+              <!-- 表头排序区域 -->
+              @if (shouldShowHeaderSortSection()) {
+                <div class="header-sort-section">
+                  <h4 class="section-title">
+                    <mat-icon>sort</mat-icon>
+                    表头排序
+                  </h4>
+                  <p class="section-description">已选择的表头（可拖拽排序，点击删除按钮移除）：</p>
+                  <div class="header-chips-container" cdkDropList cdkDropListOrientation="mixed" (cdkDropListDropped)="dropHeader($event)">
+                    @for (header of sortedHeaders(); track header; let i = $index) {
+                      <mat-chip cdkDrag (removed)="removeHeaderFromSorted(header)">
+                        {{ header }}
+                        <button matChipRemove>
+                          <mat-icon>cancel</mat-icon>
+                        </button>
+                      </mat-chip>
+                    }
+                  </div>
+                </div>
+              }
+
+              <div class="step-actions">
+                <button mat-button (click)="stepper.previous()">
+                  <mat-icon>arrow_back</mat-icon>
+                  上一步
+                </button>
+                @if (shouldShowHeaderSortSection()) {
+                  <button mat-raised-button color="primary" (click)="stepper.next()">
+                    下一步
+                    <mat-icon>arrow_forward</mat-icon>
+                  </button>
+                }
+              </div>
+            </div>
+          </mat-step>
+
+          <!-- Step 3: 设置表尾功能 -->
+          <mat-step>
+            <ng-template matStepLabel>设置表尾功能</ng-template>
+            <div class="step-content">
+              <div class="footer-functions-section">
+                <h4 class="section-title">
+                  <mat-icon>functions</mat-icon>
+                  表尾功能配置
+                </h4>
+                <p class="section-description">为选中的表头配置合计或平均值功能：</p>
+
+                <div class="footer-functions-config">
+                  <mat-form-field appearance="outline" class="footer-type-field">
+                    <mat-label>功能类型</mat-label>
+                    <mat-select [value]="newFooterType()" (selectionChange)="newFooterType.set($event.value)">
+                      <mat-option value="合计">合计</mat-option>
+                      <mat-option value="平均值">平均值</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="footer-header-field">
+                    <mat-label>选择表头</mat-label>
+                    <mat-select [value]="newFooterHeader()" (selectionChange)="newFooterHeader.set($event.value)">
+                      <mat-option value="">-- 请选择表头 --</mat-option>
+                      @for (header of getAvailableHeadersForFooter(); track header) {
+                        <mat-option [value]="header">{{ header }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+
+                  <button
+                    mat-raised-button
+                    color="primary"
+                    (click)="addFooterFunction()"
+                    [disabled]="!newFooterHeader()">
+                    <mat-icon>add</mat-icon>
+                    添加表尾功能
+                  </button>
+                </div>
+
+                @if (footerFunctions().length > 0) {
+                  <div class="footer-functions-list">
+                    <p class="list-title">已配置的表尾功能：</p>
+                    <div class="footer-functions-chips">
+                      @for (footer of footerFunctions(); track footer.id) {
+                        <mat-chip (removed)="removeFooterFunction(footer.id)">
+                          <mat-icon class="footer-icon">{{ footer.type === '合计' ? 'calculate' : 'trending_up' }}</mat-icon>
+                          {{ getFooterFunctionLabel(footer) }}
+                          <button matChipRemove>
+                            <mat-icon>cancel</mat-icon>
+                          </button>
+                        </mat-chip>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+
+              <div class="step-actions">
+                <button mat-button (click)="stepper.previous()">
+                  <mat-icon>arrow_back</mat-icon>
+                  上一步
+                </button>
+                <button mat-raised-button color="primary" (click)="onComplete()">
+                  完成
+                  <mat-icon>check</mat-icon>
+                </button>
+              </div>
+            </div>
+          </mat-step>
+        </mat-stepper>
       </mat-card-content>
     </mat-card>
   </div>
+
+  <!-- 确认对话框 -->
+  <app-confirm-dialog
+    [visible]="showConfirmDialog()"
+    [fileName]="outputFileName()"
+    [progress]="generationProgress()"
+    [isProcessing]="isProcessing()"
+    (fileNameChange)="outputFileName.set($event)"
+    (close)="closeConfirmDialog()"
+    (confirm)="startGeneration()">
+  </app-confirm-dialog>
+
+  <!-- 隐私说明 -->
+  <!-- <app-privacy-notice></app-privacy-notice> -->
 </div>

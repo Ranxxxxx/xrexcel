@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { PrivacyNoticeComponent } from '../shared/components/privacy-notice/privacy-notice.component';
 
 @Component({
   selector: 'app-home',
@@ -13,12 +14,15 @@ import { MatIconModule } from '@angular/material/icon';
     RouterLink,
     MatCardModule,
     MatButtonModule,
-    MatIconModule
+    MatIconModule,
+    PrivacyNoticeComponent
   ],
   templateUrl: './home.component.html',
   styleUrl: './home.component.scss'
 })
 export class HomeComponent {
+  version = '0.0.1'; // 版本号，与package.json保持一致
+
   features = [
     {
       id: 'summary-category',

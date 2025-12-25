@@ -28,9 +28,9 @@
       </mat-card-header>
       <mat-card-content>
         <mat-stepper [linear]="true" #stepper (selectionChange)="onStepChange($event)">
-          <!-- Step 1: 上传文件 -->
+          <!-- Step 1: 选择文件 -->
           <mat-step>
-            <ng-template matStepLabel>上传Excel文件</ng-template>
+            <ng-template matStepLabel>选择Excel文件</ng-template>
             <div class="step-content">
               <app-file-upload
                 [selectedFile]="selectedFile"
@@ -478,4 +478,7 @@
     (close)="closeConfirmDialog()"
     (confirm)="startGeneration()">
   </app-confirm-dialog>
+
+  <!-- 隐私说明 -->
+  <!-- <app-privacy-notice></app-privacy-notice> -->
 </div>
