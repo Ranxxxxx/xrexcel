@@ -493,6 +493,60 @@ export class ExcelUtilsService {
   }
 
   /**
+   * 提取并转换公式：从原始Excel单元格中提取公式并转换为新表格的公式引用
+   * @param originalCell 原始Excel单元格
+   * @param originalRowNumber 原始行号
+   * @param currentRow 当前新表格的行号
+   * @param headerIndex 表头在原始数据中的索引
+   * @param colIndex 列在新表格中的索引（1-based）
+   * @param categoryHeaders 分类表表头数组
+   * @param headerIndexMap 表头索引映射
+   * @param originalSheet 原始工作表（用于公式转换）
+   * @param categoryDataRowCount 分类表数据行数
+   * @param categoryStartRow 当前分类的起始行号（单表输出模式使用）
+   * @returns 转换后的公式字符串，如果不是公式或转换失败则返回 null
+   */
+  extractAndConvertFormula(
+    originalCell: ExcelJS.Cell,
+    originalRowNumber: number,
+    currentRow: number,
+    headerIndex: number,
+    colIndex: number,
+    categoryHeaders: string[],
+    headerIndexMap: Map<string, number>,
+    originalSheet: ExcelJS.Worksheet | null,
+    categoryDataRowCount: number = 0,
+    categoryStartRow: number = 0
+  ): string | null {
+    // 检查是否是公式
+    let formulaText = '';
+    if (originalCell.formula) {
+      formulaText = originalCell.formula;
+    } else if (typeof originalCell.value === 'object' && originalCell.value !== null && 'formula' in originalCell.value) {
+      formulaText = (originalCell.value as any).formula;
+    }
+
+    // 如果不是公式，返回 null
+    if (!formulaText) {
+      return null;
+    }
+
+    // 转换公式引用
+    return this.convertFormula(
+      formulaText,
+      originalRowNumber,
+      currentRow,
+      headerIndex,
+      colIndex,
+      categoryHeaders,
+      headerIndexMap,
+      originalSheet,
+      categoryDataRowCount,
+      categoryStartRow
+    );
+  }
+
+  /**
    * 应用表格样式到单元格
    */
   applyCellStyle(

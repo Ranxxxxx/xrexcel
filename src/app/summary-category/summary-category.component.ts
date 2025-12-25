@@ -859,36 +859,28 @@ export class SummaryCategoryComponent implements AfterViewInit {
               if (originalColNumber !== -1) {
                 const originalCell = this.originalSheet.getRow(originalRowNumber).getCell(originalColNumber);
 
-                // 检查是否是公式
-                let formulaText = '';
-                if (originalCell.formula) {
-                  formulaText = originalCell.formula;
-                } else if (typeof originalCell.value === 'object' && originalCell.value !== null && 'formula' in originalCell.value) {
-                  formulaText = (originalCell.value as any).formula;
-                }
+                // 提取并转换公式
+                const convertedFormula = this.excelUtils.extractAndConvertFormula(
+                  originalCell,
+                  originalRowNumber,
+                  currentRow,
+                  headerIndex!,
+                  colIndex + 1,
+                  categoryHeaders,
+                  headerIndexMap,
+                  this.originalSheet,
+                  categoryData.length,
+                  categoryStartRow
+                );
 
-                if (formulaText) {
-                  // 转换公式引用
-                  const convertedFormula = this.convertFormula(
-                    formulaText,
-                    originalRowNumber,
-                    currentRow,
-                    headerIndex,
-                    colIndex + 1,
-                    categoryHeaders,
-                    headerIndexMap,
-                    categoryData.length,
-                    categoryStartRow
-                  );
-
-                  if (convertedFormula) {
-                    formulaMap.set(colIndex + 1, convertedFormula);
-                    dataRow.push(null);
-                    continue;
-                  } else {
-                    dataRow.push('F-Null');
-                    continue;
-                  }
+                if (convertedFormula) {
+                  formulaMap.set(colIndex + 1, convertedFormula);
+                  dataRow.push(null);
+                  continue;
+                } else if (convertedFormula === null && (originalCell.formula || (typeof originalCell.value === 'object' && originalCell.value !== null && 'formula' in originalCell.value))) {
+                  // 如果是公式但转换失败，填充 F-Null
+                  dataRow.push('F-Null');
+                  continue;
                 } else {
                   // 不是公式，获取原始值
                   const cellValue = originalCell.value;
@@ -961,7 +953,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
         for (const header of categoryHeaders) {
           const footer = categoryFooterFunctions.find(f => f.header === header);
           if (footer) {
-            const colName = this.getExcelColumnName(categoryHeaders.indexOf(header) + 1);
+            const colName = this.excelUtils.getExcelColumnName(categoryHeaders.indexOf(header) + 1);
             if (footer.type === '合计') {
               footerRow.push({ formula: `SUM(${colName}${categoryStartRow}:${colName}${categoryEndRow})` });
             } else if (footer.type === '平均值') {
@@ -1013,7 +1005,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
       for (const header of categoryHeaders) {
         const footer = footerFunctions.find(f => f.header === header);
         if (footer) {
-          const colName = this.getExcelColumnName(categoryHeaders.indexOf(header) + 1);
+          const colName = this.excelUtils.getExcelColumnName(categoryHeaders.indexOf(header) + 1);
           if (hasCategoryFooter && categorySubtotalRows.length > 0) {
             // 如果有分类小计行，总合计应该是对所有小计行的合计
             const subtotalRefs = categorySubtotalRows.map(row => `${colName}${row}`);
@@ -1051,7 +1043,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
     }
 
     // 自动调整列宽
-    this.autoFitColumns(sheet, categoryHeaders.length);
+    this.excelUtils.autoFitColumns(sheet, categoryHeaders.length);
 
     // 设置表头筛选器
     sheet.autoFilter = {
@@ -1148,7 +1140,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
               if (mappedHeaderIndex >= 0) {
                 // 引用分类表的表尾行（数据行数 + 4，因为第1行是返回链接，第2行是标题，第3行是表头，数据从第4行开始）
                 const footerRow = categoryData.length + 4;
-                const targetCol = this.getExcelColumnName(mappedHeaderIndex + 1);
+                const targetCol = this.excelUtils.getExcelColumnName(mappedHeaderIndex + 1);
                 // 工作表名称必须用单引号包裹（Excel要求）
                 const sheetName = `'${categorySheet.name}'`;
                 cellFormula = `${sheetName}!${targetCol}${footerRow}`;
@@ -1180,7 +1172,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
                 // 我们尝试通过公式引用对应分类表的整列数据进行计算
                 const catHeaderIdx = categoryTableHeaders.indexOf(summaryHeader);
                 if (catHeaderIdx >= 0) {
-                  const targetCol = this.getExcelColumnName(catHeaderIdx + 1);
+                  const targetCol = this.excelUtils.getExcelColumnName(catHeaderIdx + 1);
                   const startRow = 4;
                   const endRow = 3 + categoryData.length;
                   const func = footer.type === '合计' ? 'SUM' : 'AVERAGE';
@@ -1193,7 +1185,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
                 // 如果没有表尾功能，但分类表有该表头，则通过公式引用分类表的第一行数据
                 const catHeaderIdx = categoryTableHeaders.indexOf(summaryHeader);
                 if (catHeaderIdx >= 0) {
-                  const targetCol = this.getExcelColumnName(catHeaderIdx + 1);
+                  const targetCol = this.excelUtils.getExcelColumnName(catHeaderIdx + 1);
                   cellFormula = `'${categorySheet.name}'!${targetCol}4`; // 引用分类表第一行数据
                   cellValue = null;
                 } else {
@@ -1247,10 +1239,10 @@ export class SummaryCategoryComponent implements AfterViewInit {
         } else {
           // 如果已经有字体设置（如超链接），只应用边框
           cell.border = {
-            top: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-            left: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-            bottom: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } },
-            right: { style: style.borderStyle as any, color: { argb: this.hexToArgb(style.borderColor) } }
+            top: { style: style.borderStyle as any, color: { argb: this.excelUtils.hexToArgb(style.borderColor) } },
+            left: { style: style.borderStyle as any, color: { argb: this.excelUtils.hexToArgb(style.borderColor) } },
+            bottom: { style: style.borderStyle as any, color: { argb: this.excelUtils.hexToArgb(style.borderColor) } },
+            right: { style: style.borderStyle as any, color: { argb: this.excelUtils.hexToArgb(style.borderColor) } }
           };
         }
       }
@@ -1276,7 +1268,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
               const mappedHeader = categoryFooter.header;
               const mappedHeaderIndex = categoryTableHeaders.indexOf(mappedHeader);
               if (mappedHeaderIndex >= 0) {
-                const targetCol = this.getExcelColumnName(mappedHeaderIndex + 1);
+                const targetCol = this.excelUtils.getExcelColumnName(mappedHeaderIndex + 1);
                 // 构建引用所有分类表表尾的公式
                 const footerRefs: string[] = [];
                 for (const categoryValue of categoryValues) {
@@ -1305,7 +1297,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
             const catHeaderIdx = categoryTableHeaders.indexOf(summaryHeader);
             if (catHeaderIdx >= 0) {
               // 汇总所有分类表中该列的数据
-              const targetCol = this.getExcelColumnName(catHeaderIdx + 1);
+              const targetCol = this.excelUtils.getExcelColumnName(catHeaderIdx + 1);
               const dataRefs: string[] = [];
               for (const categoryValue of categoryValues) {
                 const categorySheet = categorySheetMap.get(categoryValue)!;
@@ -1344,7 +1336,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
     }
 
     // 自动调整列宽
-    this.autoFitColumns(sheet, summaryHeaders.length);
+    this.excelUtils.autoFitColumns(sheet, summaryHeaders.length);
 
     // 设置表头筛选器（从第2行表头行开始，到数据结束行）
     sheet.autoFilter = {
@@ -1424,37 +1416,27 @@ export class SummaryCategoryComponent implements AfterViewInit {
             if (originalColNumber !== -1) {
               const originalCell = this.originalSheet.getRow(originalRowNumber).getCell(originalColNumber);
 
-              // 检查是否是公式（处理对象形式或直接属性）
-              let formulaText = '';
-              if (originalCell.formula) {
-                formulaText = originalCell.formula;
-              } else if (typeof originalCell.value === 'object' && originalCell.value !== null && 'formula' in originalCell.value) {
-                formulaText = (originalCell.value as any).formula;
-              }
+              // 提取并转换公式
+              const convertedFormula = this.excelUtils.extractAndConvertFormula(
+                originalCell,
+                originalRowNumber,
+                currentCategoryRow,
+                headerIndex!,
+                colIndex + 1,
+                categoryHeaders,
+                headerIndexMap,
+                this.originalSheet,
+                categoryData.length // 分类表数据行数
+              );
 
-              if (formulaText) {
-                // 解析并转换公式
-                // 传入分类表数据行数，确保不会引用表尾行
-                const convertedFormula = this.convertFormula(
-                  formulaText,
-                  originalRowNumber,
-                  currentCategoryRow,
-                  headerIndex,
-                  colIndex + 1,
-                  categoryHeaders,
-                  headerIndexMap,
-                  categoryData.length // 分类表数据行数
-                );
-
-                if (convertedFormula) {
-                  formulaMap.set(colIndex + 1, convertedFormula);
-                  dataRow.push(null); // 占位，稍后会被公式替换
-                  continue; // 跳过后续的普通值处理
-                } else {
-                  // 公式转换失败，记录日志以便调试
-                  dataRow.push('F-Null'); // 公式依赖缺失
-                  continue;
-                }
+              if (convertedFormula) {
+                formulaMap.set(colIndex + 1, convertedFormula);
+                dataRow.push(null); // 占位，稍后会被公式替换
+                continue; // 跳过后续的普通值处理
+              } else if (convertedFormula === null && (originalCell.formula || (typeof originalCell.value === 'object' && originalCell.value !== null && 'formula' in originalCell.value))) {
+                // 如果是公式但转换失败，填充 F-Null
+                dataRow.push('F-Null'); // 公式依赖缺失
+                continue;
               } else {
                 // 不是公式，获取原始值并保持数据类型
                 const cellValue = originalCell.value;
@@ -1587,7 +1569,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
       for (const header of categoryHeaders) {
         const footer = categoryFooterFunctions.find(f => f.header === header);
         if (footer) {
-          const colName = this.getExcelColumnName(categoryHeaders.indexOf(header) + 1);
+          const colName = this.excelUtils.getExcelColumnName(categoryHeaders.indexOf(header) + 1);
           const startRow = 4; // 数据从第4行开始（1:返回, 2:标题, 3:表头）
           const endRow = 3 + categoryData.length;
 
@@ -1609,7 +1591,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
     }
 
     // 自动调整列宽
-    this.autoFitColumns(sheet, categoryHeaders.length);
+    this.excelUtils.autoFitColumns(sheet, categoryHeaders.length);
 
     // 设置表头筛选器（从第3行表头行开始，到数据结束行）
     sheet.autoFilter = {
@@ -1618,46 +1600,6 @@ export class SummaryCategoryComponent implements AfterViewInit {
     };
   }
 
-  // 自动调整列宽，确保内容不折叠、不超出
-  autoFitColumns(sheet: ExcelJS.Worksheet, columnCount: number) {
-    this.excelUtils.autoFitColumns(sheet, columnCount);
-  }
-
-  // 将十六进制颜色转换为ARGB格式
-  hexToArgb(hex: string): string {
-    return this.excelUtils.hexToArgb(hex);
-  }
-
-  // 获取Excel列名（1 -> A, 2 -> B, 27 -> AA）
-  getExcelColumnName(columnNumber: number): string {
-    return this.excelUtils.getExcelColumnName(columnNumber);
-  }
-
-  // 转换公式：将原始数据中的公式引用转换为分类表中的引用
-  convertFormula(
-    formula: string,
-    originalRow: number,
-    categoryRow: number,
-    originalCol: number,
-    categoryCol: number,
-    categoryHeaders: string[],
-    headerIndexMap: Map<string, number>,
-    categoryDataRowCount: number = 0,
-    categoryStartRow: number = 0
-  ): string | null {
-    return this.excelUtils.convertFormula(
-      formula,
-      originalRow,
-      categoryRow,
-      originalCol,
-      categoryCol,
-      categoryHeaders,
-      headerIndexMap,
-      this.originalSheet,
-      categoryDataRowCount,
-      categoryStartRow
-    );
-  }
 
   /**
    * 检测分类值是否为日期类型
