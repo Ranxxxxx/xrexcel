@@ -13,6 +13,27 @@
       align-items: center;
       font-size: 1.5rem;
       font-weight: 500;
+      width: 100%;
+
+      .title-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+
+        .title-content {
+          display: flex;
+          align-items: center;
+        }
+
+        .reset-button {
+          margin-left: auto;
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          --mat-button-text-container-height: 28px;
+        }
+      }
     }
 
     mat-card-subtitle {

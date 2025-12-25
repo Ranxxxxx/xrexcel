@@ -13,8 +13,10 @@
       [tableStyle]="tableStyle()"
       [previewData]="previewData"
       [previewExpanded]="previewExpanded()"
+      [showResetButton]="showResetButton()"
       (styleChange)="updateStyle($event.key, $event.value)"
-      (previewExpandedChange)="previewExpanded.set($event)">
+      (previewExpandedChange)="previewExpanded.set($event)"
+      (resetToDefault)="resetTableStyleToDefault()">
     </app-table-style-preview>
 
     <mat-card class="content-card">

@@ -1,8 +1,21 @@
 <mat-card class="settings-card">
   <mat-card-header>
     <mat-card-title>
-      <mat-icon class="header-icon">palette</mat-icon>
-      表格风格设置
+      <div class="title-container">
+        <div class="title-content">
+          <mat-icon class="header-icon">palette</mat-icon>
+          表格风格设置
+        </div>
+        @if (showResetButton()) {
+          <button mat-button
+                  class="reset-button"
+                  (click)="onResetToDefault()"
+                  color="primary">
+            <mat-icon>refresh</mat-icon>
+            重置外观
+          </button>
+        }
+      </div>
     </mat-card-title>
     <mat-card-subtitle>自定义表格的外观样式和格式</mat-card-subtitle>
   </mat-card-header>
@@ -178,6 +191,7 @@
   </mat-card-content>
 </mat-card>
 
+@if (showPreview()) {
 <mat-card class="preview-card">
   <mat-expansion-panel [expanded]="previewExpanded()" (opened)="onPreviewExpandedChange(true)" (closed)="onPreviewExpandedChange(false)">
     <mat-expansion-panel-header>
@@ -271,4 +285,5 @@
     </div>
   </mat-expansion-panel>
 </mat-card>
+}
 

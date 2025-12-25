@@ -23,6 +23,7 @@ import { TableStylePreviewComponent } from '../shared/components/table-style-pre
 import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/confirm-dialog.component';
 import { FileUploadComponent } from '../shared/components/file-upload/file-upload.component';
 import { ExcelUtilsService } from '../shared/services/excel-utils.service';
+import { TableStyleStorageService } from '../shared/services/table-style-storage.service';
 import * as ExcelJS from 'exceljs';
 
 @Component({
@@ -63,6 +64,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
   private viewInitialized = signal<boolean>(false);
   tableStyle = signal<TableStyleConfig>({ ...DEFAULT_TABLE_STYLE });
   previewExpanded = signal<boolean>(false); // 预览区域展开状态，默认折叠
+  showResetButton = signal<boolean>(false); // 是否显示重置按钮
 
   // Step相关数据
   selectedFile: File | null = null;
@@ -95,7 +97,13 @@ export class SummaryCategoryComponent implements AfterViewInit {
   newCategoryFooterType = signal<'合计' | '平均值'>('合计'); // Step4新增表尾功能类型
   newCategoryFooterHeader = signal<string>(''); // Step4新增表尾功能关联的表头
 
-  constructor(private excelUtils: ExcelUtilsService) {
+  constructor(
+    private excelUtils: ExcelUtilsService,
+    private tableStyleStorage: TableStyleStorageService
+  ) {
+    // 从 localStorage 加载表格风格配置
+    this.loadTableStyleFromStorage();
+
     // 监听映射变化，更新连接线位置
     effect(() => {
       const mappings = this.headerMappings();
@@ -106,7 +114,32 @@ export class SummaryCategoryComponent implements AfterViewInit {
   }
 
   updateStyle(key: keyof TableStyleConfig, value: any) {
-    this.tableStyle.update(config => ({ ...config, [key]: value }));
+    this.tableStyle.update(config => {
+      const newConfig = { ...config, [key]: value };
+      // 保存到 localStorage（所有模块共享）
+      this.tableStyleStorage.saveTableStyle(newConfig);
+      this.showResetButton.set(true);
+      return newConfig;
+    });
+  }
+
+  // 从 localStorage 加载表格风格配置
+  private loadTableStyleFromStorage() {
+    const savedStyle = this.tableStyleStorage.loadTableStyle();
+    if (savedStyle) {
+      this.tableStyle.set(savedStyle);
+      this.showResetButton.set(true);
+    } else {
+      this.tableStyle.set({ ...DEFAULT_TABLE_STYLE });
+      this.showResetButton.set(false);
+    }
+  }
+
+  // 重置为默认配置
+  resetTableStyleToDefault() {
+    this.tableStyleStorage.resetToDefault();
+    this.tableStyle.set({ ...DEFAULT_TABLE_STYLE });
+    this.showResetButton.set(false);
   }
 
   async onFileSelected(file: File) {
