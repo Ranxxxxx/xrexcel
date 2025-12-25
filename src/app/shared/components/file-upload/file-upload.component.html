@@ -1,0 +1,23 @@
+<div class="upload-area">
+  <input
+    type="file"
+    [accept]="accept()"
+    (change)="onFileSelected($event)"
+    #fileInput
+    id="file-input"
+    style="display: none;">
+  <button mat-raised-button color="primary" type="button" (click)="triggerFileInput(fileInput)">
+    <mat-icon>cloud_upload</mat-icon>
+    选择Excel文件
+  </button>
+  @if (selectedFile()) {
+    <div class="file-info">
+      <mat-icon>description</mat-icon>
+      <span>{{ selectedFile()!.name }}</span>
+    </div>
+  }
+  @if (isUploading()) {
+    <mat-progress-bar mode="indeterminate" class="upload-progress"></mat-progress-bar>
+  }
+</div>
+

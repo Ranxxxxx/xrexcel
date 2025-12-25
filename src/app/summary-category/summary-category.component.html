@@ -30,28 +30,11 @@
           <mat-step>
             <ng-template matStepLabel>上传Excel文件</ng-template>
             <div class="step-content">
-              <div class="upload-area">
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  (change)="onFileSelected($event)"
-                  #fileInput
-                  id="file-input"
-                  style="display: none;">
-                <button mat-raised-button color="primary" type="button" (click)="fileInput.click()">
-                  <mat-icon>cloud_upload</mat-icon>
-                  选择Excel文件
-                </button>
-                @if (selectedFile) {
-                  <div class="file-info">
-                    <mat-icon>description</mat-icon>
-                    <span>{{ selectedFile.name }}</span>
-                  </div>
-                }
-                @if (isUploading()) {
-                  <mat-progress-bar mode="indeterminate" class="upload-progress"></mat-progress-bar>
-                }
-              </div>
+              <app-file-upload
+                [selectedFile]="selectedFile"
+                [isUploading]="isUploading()"
+                (fileSelected)="onFileSelected($event)">
+              </app-file-upload>
               @if (headers().length > 0) {
                 <div class="step-actions">
                   <button mat-raised-button color="primary" (click)="stepper.next()">
@@ -68,20 +51,29 @@
             <ng-template matStepLabel>选择分类依据</ng-template>
             <div class="step-content">
               <p class="step-description">请选择一个表头作为分类依据：</p>
-              <mat-selection-list>
+              <div class="header-list">
                 @for (header of headers(); track header) {
-                  <mat-list-option [value]="header" [selected]="categoryHeader() === header" (click)="selectCategoryHeader(header)">
+                  <mat-chip
+                    [class.selected]="categoryHeader() === header"
+                    (click)="selectCategoryHeader(header)">
+                    @if (categoryHeader() === header) {
+                      <mat-icon>check</mat-icon>
+                    }
                     {{ header }}
-                  </mat-list-option>
+                  </mat-chip>
                 }
-              </mat-selection-list>
+              </div>
               @if (categoryHeader()) {
-                <div class="selected-info">
-                  <mat-icon>check_circle</mat-icon>
-                  <span>已选择：{{ categoryHeader() }}</span>
-                  <button mat-icon-button (click)="clearCategoryHeader()" matTooltip="清除选择">
-                    <mat-icon>close</mat-icon>
-                  </button>
+                <div class="output-format-section">
+                  <p class="step-description">选择输出格式：</p>
+                  <mat-radio-group [value]="outputFormat()" (change)="onOutputFormatChange($event)">
+                    <mat-radio-button value="single" class="format-option">
+                      <span>单个Sheet</span>
+                    </mat-radio-button>
+                    <mat-radio-button value="multiple" class="format-option">
+                      <span>拆分为多个Sheet</span>
+                    </mat-radio-button>
+                  </mat-radio-group>
                 </div>
               }
               <div class="step-actions">
@@ -215,52 +207,64 @@
           <mat-step>
             <ng-template matStepLabel>设置分类表</ng-template>
             <div class="step-content">
-              <p class="step-description">请选择分类表中需要保留的表头（可多选，包括所有表头），也可以新增表头：</p>
-              <div class="header-list">
-                @for (header of headers(); track header) {
-                  <mat-chip
-                    [class.selected]="categoryTableHeaders().includes(header)"
-                    (click)="toggleCategoryTableHeader(header)">
-                    {{ header }}
-                  </mat-chip>
-                }
-              </div>
-
-              <div class="add-header-section">
-                <mat-form-field appearance="outline">
-                  <mat-label>新增表头</mat-label>
-                  <input matInput [value]="newHeaderName()" (input)="newHeaderName.set($any($event.target).value)" placeholder="输入新表头名称" (keyup.enter)="addNewHeaderStep4()">
-                  <button mat-icon-button matSuffix (click)="addNewHeaderStep4()" [disabled]="!newHeaderName().trim()">
-                    <mat-icon>add</mat-icon>
-                  </button>
-                </mat-form-field>
-              </div>
-
-              @if (categoryTableHeaders().length > 0) {
-                <div class="selected-headers">
-                  <p>已选择（可拖拽排序）：</p>
-                  <div class="chip-container" cdkDropList cdkDropListOrientation="mixed" (cdkDropListDropped)="dropCategoryTableHeader($event)">
-                    @for (header of categoryTableHeaders(); track header) {
-                      <mat-chip
-                        cdkDrag
-                        (removed)="removeCategoryTableHeader(header)"
-                        class="draggable-chip">
-                        {{ header }}
-                        <button matChipRemove>
-                          <mat-icon>cancel</mat-icon>
-                        </button>
-                      </mat-chip>
-                    }
-                  </div>
+              @if (outputFormat() === 'multiple') {
+                <p class="step-description">请选择分类表中需要保留的表头（可多选，包括所有表头），也可以新增表头：</p>
+                <div class="header-list">
+                  @for (header of headers(); track header) {
+                    <mat-chip
+                      [class.selected]="categoryTableHeaders().includes(header)"
+                      (click)="toggleCategoryTableHeader(header)">
+                      {{ header }}
+                    </mat-chip>
+                  }
                 </div>
 
-                <!-- 表尾功能设置 -->
+                <div class="add-header-section">
+                  <mat-form-field appearance="outline">
+                    <mat-label>新增表头</mat-label>
+                    <input matInput [value]="newHeaderName()" (input)="newHeaderName.set($any($event.target).value)" placeholder="输入新表头名称" (keyup.enter)="addNewHeaderStep4()">
+                    <button mat-icon-button matSuffix (click)="addNewHeaderStep4()" [disabled]="!newHeaderName().trim()">
+                      <mat-icon>add</mat-icon>
+                    </button>
+                  </mat-form-field>
+                </div>
+
+                @if (categoryTableHeaders().length > 0) {
+                  <div class="selected-headers">
+                    <p>已选择（可拖拽排序）：</p>
+                    <div class="chip-container" cdkDropList cdkDropListOrientation="mixed" (cdkDropListDropped)="dropCategoryTableHeader($event)">
+                      @for (header of categoryTableHeaders(); track header) {
+                        <mat-chip
+                          cdkDrag
+                          (removed)="removeCategoryTableHeader(header)"
+                          class="draggable-chip">
+                          {{ header }}
+                          <button matChipRemove>
+                            <mat-icon>cancel</mat-icon>
+                          </button>
+                        </mat-chip>
+                      }
+                    </div>
+                  </div>
+                }
+              } @else {
+                <p class="step-description">单表输出模式下，将使用所有表头（除分类依据外）。请设置表尾功能：</p>
+              }
+
+              <!-- 表尾功能设置 -->
+              @if (categoryTableHeaders().length > 0 || outputFormat() === 'single') {
                 <div class="footer-functions-section">
                   <h4 class="section-title">
                     <mat-icon>functions</mat-icon>
                     表尾功能设置
                   </h4>
-                  <p class="section-description">为已选择的表头添加表尾功能（合计、平均值）：</p>
+                  <p class="section-description">
+                    @if (outputFormat() === 'single') {
+                      为汇总表表头添加表尾功能（合计、平均值），每个分类会显示小计：
+                    } @else {
+                      为表头添加表尾功能（合计、平均值），每个分类会显示小计：
+                    }
+                  </p>
 
                   <div class="footer-function-form">
                     <mat-form-field appearance="outline">
@@ -274,7 +278,7 @@
                     <mat-form-field appearance="outline">
                       <mat-label>选择表头</mat-label>
                       <mat-select [value]="newCategoryFooterHeader()" (selectionChange)="newCategoryFooterHeader.set($event.value)">
-                        @for (header of categoryTableHeaders(); track header) {
+                        @for (header of getCategoryFooterHeaders(); track header) {
                           <mat-option [value]="header">{{ header }}</mat-option>
                         }
                       </mat-select>
@@ -314,17 +318,33 @@
                   <mat-icon>arrow_back</mat-icon>
                   上一步
                 </button>
-                @if (categoryTableHeaders().length > 0) {
-                  <button mat-raised-button color="primary" (click)="stepper.next()">
-                    下一步
-                    <mat-icon>arrow_forward</mat-icon>
-                  </button>
+                @if (outputFormat() === 'single' || categoryTableHeaders().length > 0) {
+                  @if (outputFormat() === 'single') {
+                    <button mat-raised-button color="primary" (click)="onComplete()" [disabled]="isProcessing()">
+                      @if (isProcessing()) {
+                        <mat-icon>hourglass_empty</mat-icon>
+                      } @else {
+                        <mat-icon>check</mat-icon>
+                      }
+                      @if (isProcessing()) {
+                        处理中...
+                      } @else {
+                        开始
+                      }
+                    </button>
+                  } @else {
+                    <button mat-raised-button color="primary" (click)="stepper.next()">
+                      下一步
+                      <mat-icon>arrow_forward</mat-icon>
+                    </button>
+                  }
                 }
               </div>
             </div>
           </mat-step>
 
           <!-- Step 5: 设置关联的表头 -->
+          @if (outputFormat() === 'multiple') {
           <mat-step>
             <ng-template matStepLabel>设置关联</ng-template>
             <div class="step-content">
@@ -440,45 +460,20 @@
               </div>
             </div>
           </mat-step>
+          }
         </mat-stepper>
       </mat-card-content>
     </mat-card>
   </div>
 
   <!-- 确认对话框 -->
-  @if (showConfirmDialog()) {
-    <div class="dialog-overlay" [class.no-close]="generationProgress() > 0" (click)="generationProgress() === 0 && closeConfirmDialog()">
-      <mat-card class="confirm-dialog" (click)="$event.stopPropagation()">
-        <mat-card-header>
-          <mat-card-title>
-            <mat-icon>info</mat-icon>
-            确认信息
-          </mat-card-title>
-        </mat-card-header>
-        <mat-card-content class="dialog-content">
-          @if (generationProgress() === 0) {
-            <mat-form-field appearance="outline" class="full-width">
-              <mat-label>文件名</mat-label>
-              <input matInput [value]="outputFileName()" (input)="outputFileName.set($any($event.target).value)" placeholder="请输入文件名">
-            </mat-form-field>
-          } @else {
-            <div class="progress-container">
-              <p class="progress-text">正在生成文件，请稍候...</p>
-              <mat-progress-bar mode="determinate" [value]="generationProgress()"></mat-progress-bar>
-              <p class="progress-percent">{{ generationProgress().toFixed(0) }}%</p>
-            </div>
-          }
-        </mat-card-content>
-        <mat-card-actions class="dialog-actions" align="end">
-          @if (generationProgress() === 0) {
-            <button mat-button (click)="closeConfirmDialog()">取消</button>
-            <button mat-raised-button color="primary" (click)="startGeneration()" [disabled]="!outputFileName().trim()">
-              <mat-icon>play_arrow</mat-icon>
-              开始生成文件
-            </button>
-          }
-        </mat-card-actions>
-      </mat-card>
-    </div>
-  }
+  <app-confirm-dialog
+    [visible]="showConfirmDialog()"
+    [fileName]="outputFileName()"
+    [progress]="generationProgress()"
+    [isProcessing]="isProcessing()"
+    (fileNameChange)="outputFileName.set($event)"
+    (close)="closeConfirmDialog()"
+    (confirm)="startGeneration()">
+  </app-confirm-dialog>
 </div>

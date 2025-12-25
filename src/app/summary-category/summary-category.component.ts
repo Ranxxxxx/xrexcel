@@ -20,6 +20,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { TableStyleConfig, DEFAULT_TABLE_STYLE } from '../shared/models/table-style.model';
 import { TableStylePreviewComponent } from '../shared/components/table-style-preview/table-style-preview.component';
+import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/confirm-dialog.component';
+import { FileUploadComponent } from '../shared/components/file-upload/file-upload.component';
 import { ExcelUtilsService } from '../shared/services/excel-utils.service';
 import * as ExcelJS from 'exceljs';
 
@@ -46,7 +48,9 @@ import * as ExcelJS from 'exceljs';
     MatRadioModule,
     MatTooltipModule,
     DragDropModule,
-    TableStylePreviewComponent
+    TableStylePreviewComponent,
+    ConfirmDialogComponent,
+    FileUploadComponent
   ],
   templateUrl: './summary-category.component.html',
   styleUrl: './summary-category.component.scss'
@@ -67,6 +71,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
   originalWorkbook: ExcelJS.Workbook | null = null; // 保存原始Excel工作簿，用于读取公式和超链接
   originalSheet: ExcelJS.Worksheet | null = null; // 保存原始工作表
   categoryHeader = signal<string>(''); // Step2: 分类依据表头（单选，不能新增）
+  outputFormat = signal<'single' | 'multiple'>('multiple'); // Step2: 输出格式（单表输出/拆分为多个表）
   summaryHeaders = signal<string[]>([]); // Step3: 汇总表表头（可新增）
   categoryTableHeaders = signal<string[]>([]); // Step4: 分类表表头（可新增）
   newHeaderName = signal<string>(''); // Step3和Step4共用
@@ -104,29 +109,35 @@ export class SummaryCategoryComponent implements AfterViewInit {
     this.tableStyle.update(config => ({ ...config, [key]: value }));
   }
 
-  async onFileSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files && input.files.length > 0) {
-      this.selectedFile = input.files[0];
-      this.isUploading.set(true);
+  async onFileSelected(file: File) {
+    this.selectedFile = file;
+    this.isUploading.set(true);
 
-      try {
-        await this.readExcelFile(this.selectedFile);
-      } catch (error: any) {
-        console.error('读取Excel文件失败:', error);
-        const errorMessage = error?.message || '未知错误';
-        alert(`读取Excel文件失败：${errorMessage}\n\n请确保：\n1. 文件格式为 .xlsx 或 .xls\n2. 文件未损坏\n3. 文件包含至少一个工作表`);
-      } finally {
-        this.isUploading.set(false);
-        // 重置文件输入，允许重新选择同一文件
-        input.value = '';
-      }
+    try {
+      await this.readExcelFile(this.selectedFile);
+    } catch (error: any) {
+      console.error('读取Excel文件失败:', error);
+      const errorMessage = error?.message || '未知错误';
+      alert(`读取Excel文件失败：${errorMessage}\n\n请确保：\n1. 文件格式为 .xlsx\n2. 文件未损坏\n3. 文件包含至少一个工作表`);
+    } finally {
+      this.isUploading.set(false);
     }
   }
 
   // 步骤变化处理
   onStepChange(event: any) {
     // 预览会自动更新，因为使用了响应式数据
+    // 如果进入step4且是单表输出，自动设置分类表表头
+    if (event.selectedIndex === 3 && this.outputFormat() === 'single') {
+      const categoryHeader = this.categoryHeader();
+      const allHeaders = this.headers();
+      const remainingHeaders = categoryHeader
+        ? allHeaders.filter(h => h !== categoryHeader)
+        : allHeaders;
+      if (this.categoryTableHeaders().length === 0) {
+        this.categoryTableHeaders.set(remainingHeaders);
+      }
+    }
   }
 
   async readExcelFile(file: File) {
@@ -159,9 +170,45 @@ export class SummaryCategoryComponent implements AfterViewInit {
     return this.headers().filter(h => h !== categoryHeader);
   }
 
+  getCategoryFooterHeaders(): string[] {
+    // Step4: 表尾功能可用的表头
+    // 单表输出：使用step3选择的汇总表表头
+    // 多表输出：使用step4选择的分类表表头
+    if (this.outputFormat() === 'single') {
+      return this.summaryHeaders();
+    } else {
+      // 多表输出时，如果有选择的分类表表头，使用它们；否则使用所有表头（除分类依据外）
+      const categoryTableHeaders = this.categoryTableHeaders();
+      if (categoryTableHeaders.length > 0) {
+        return categoryTableHeaders;
+      }
+      return this.getRemainingHeadersForCategory();
+    }
+  }
+
   selectCategoryHeader(header: string) {
     // Step2: 选择分类依据表头（单选）
-    this.categoryHeader.set(header);
+    // 如果点击的是已选中的表头，则取消选择；否则选择该表头
+    if (this.categoryHeader() === header) {
+      this.categoryHeader.set('');
+    } else {
+      this.categoryHeader.set(header);
+    }
+  }
+
+  onOutputFormatChange(event: any) {
+    // Step2: 处理输出格式变化
+    this.outputFormat.set(event.value);
+
+    // 如果选择单表输出，自动设置分类表表头为所有表头（除了分类依据表头）
+    if (event.value === 'single') {
+      const categoryHeader = this.categoryHeader();
+      const allHeaders = this.headers();
+      const remainingHeaders = categoryHeader
+        ? allHeaders.filter(h => h !== categoryHeader)
+        : allHeaders;
+      this.categoryTableHeaders.set(remainingHeaders);
+    }
   }
 
   toggleSummaryHeader(header: string) {
@@ -494,28 +541,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
 
   // 获取默认预览数据（未上传文件时使用）
   getDefaultPreviewData(): any[][] {
-    // 创建示例表头和数据
-    const headers = ['列1', '列2', '列3', '列4'];
-    const previewData: any[][] = [];
-
-    // 添加标题行（第一行，跨所有列）
-    const titleRow = ['示例表格标题', '', '', ''];
-    previewData.push(titleRow);
-
-    // 添加表头行
-    previewData.push(headers);
-
-    // 添加示例数据行
-    for (let i = 0; i < 3; i++) {
-      const row = headers.map((_, index) => `示例数据${index + 1}-${i + 1}`);
-      previewData.push(row);
-    }
-
-    // 添加合计行
-    const totalRow = ['合计', ...headers.slice(1).map(() => '100.00')];
-    previewData.push(totalRow);
-
-    return previewData;
+    return this.excelUtils.getDefaultPreviewData();
   }
 
   // 获取汇总表预览数据
@@ -629,8 +655,8 @@ export class SummaryCategoryComponent implements AfterViewInit {
     }
 
     // 设置默认文件名（去除扩展名）
-    const originalFileName = this.selectedFile.name.replace(/\.[^/.]+$/, '');
-    this.outputFileName.set(originalFileName);
+    const defaultFileName = this.excelUtils.generateDefaultFileName(this.selectedFile.name, '汇总分类表');
+    this.outputFileName.set(defaultFileName);
     this.showConfirmDialog.set(true);
   }
 
@@ -647,49 +673,11 @@ export class SummaryCategoryComponent implements AfterViewInit {
     this.isProcessing.set(true);
 
     try {
-      // 模拟进度条，最快1秒完成
-      const startTime = Date.now();
-      const minDuration = 1000; // 最少1秒
-
-      // 开始生成Excel（返回blob，不直接下载）
-      const generatePromise = this.generateExcel(fileName);
-
-      // 更新进度条
-      const progressInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        if (elapsed < minDuration) {
-          // 在1秒内，进度条从0到90%
-          const progress = Math.min(90, (elapsed / minDuration) * 90);
-          this.generationProgress.set(progress);
-        } else {
-          // 1秒后，等待生成完成
-          this.generationProgress.set(95);
-        }
-      }, 50);
-
-      // 等待生成完成
-      const blob = await generatePromise;
-
-      // 确保至少1秒
-      const elapsed = Date.now() - startTime;
-      if (elapsed < minDuration) {
-        await new Promise(resolve => setTimeout(resolve, minDuration - elapsed));
-      }
-
-      // 完成进度条
-      clearInterval(progressInterval);
-      this.generationProgress.set(100);
-
-      // 等待进度条动画完成后再下载（等待一小段时间确保进度条显示100%）
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // 现在触发下载
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${fileName}.xlsx`;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      await this.excelUtils.downloadFileWithProgress(
+        () => this.generateExcel(fileName),
+        fileName,
+        (progress) => this.generationProgress.set(progress)
+      );
 
       // 等待一小段时间后关闭对话框
       setTimeout(() => {
@@ -748,40 +736,328 @@ export class SummaryCategoryComponent implements AfterViewInit {
       groupedData.get(categoryValue)!.push(item);
     }
 
-    // 创建汇总表工作表
-    const summarySheet = workbook.addWorksheet('汇总表');
+    // 根据输出格式选择不同的生成逻辑
+    if (this.outputFormat() === 'single') {
+      // 单表输出：创建一个工作表，按分类分组显示，每个分类有小计，最后有总合计
+      await this.createSingleSheetOutput(workbook, groupedData, style, categoryValueTypes);
+    } else {
+      // 多表输出：创建汇总表和多个分类表
+      // 创建汇总表工作表
+      const summarySheet = workbook.addWorksheet('汇总表');
 
-    // 为每个分类创建分类表工作表（先创建，以便汇总表可以引用）
-    // 汇总表的分类需要去重：使用 Set 确保每个分类值只出现一次
-    // 根据数据类型进行排序：日期按日期排序，其他按字母排序
-    const uniqueCategoryValues = Array.from(new Set(Array.from(groupedData.keys())));
-    const categoryValues = this.sortCategoryValues(uniqueCategoryValues, categoryValueTypes);
-    const categorySheetMap = new Map<string, ExcelJS.Worksheet>(); // 存储分类表映射
+      // 为每个分类创建分类表工作表（先创建，以便汇总表可以引用）
+      // 汇总表的分类需要去重：使用 Set 确保每个分类值只出现一次
+      // 根据数据类型进行排序：日期按日期排序，其他按字母排序
+      const uniqueCategoryValues = Array.from(new Set(Array.from(groupedData.keys())));
+      const categoryValues = this.sortCategoryValues(uniqueCategoryValues, categoryValueTypes);
+      const categorySheetMap = new Map<string, ExcelJS.Worksheet>(); // 存储分类表映射
 
-    for (const categoryValue of categoryValues) {
-      const categoryData = groupedData.get(categoryValue)!;
-      let sheetName = String(categoryValue || '未分类');
-      // Excel工作表名称限制31个字符，不能包含: \ / ? * [ ]
-      sheetName = sheetName.replace(/[:\\\/\?\*\[\]]/g, '_');
-      sheetName = sheetName.substring(0, 31);
-      const categorySheet = workbook.addWorksheet(sheetName);
-      categorySheetMap.set(categoryValue, categorySheet);
-    }
+      for (const categoryValue of categoryValues) {
+        const categoryData = groupedData.get(categoryValue)!;
+        let sheetName = String(categoryValue || '未分类');
+        // Excel工作表名称限制31个字符，不能包含: \ / ? * [ ]
+        sheetName = sheetName.replace(/[:\\\/\?\*\[\]]/g, '_');
+        sheetName = sheetName.substring(0, 31);
+        const categorySheet = workbook.addWorksheet(sheetName);
+        categorySheetMap.set(categoryValue, categorySheet);
+      }
 
-    // 创建汇总表（传入分类表映射以便添加超链接和引用）
-    await this.createSummarySheet(summarySheet, groupedData, style, categorySheetMap, workbook, categoryValueTypes);
+      // 创建汇总表（传入分类表映射以便添加超链接和引用）
+      await this.createSummarySheet(summarySheet, groupedData, style, categorySheetMap, workbook, categoryValueTypes);
 
-    // 创建分类表（传入汇总表以便添加返回链接）
-    for (const categoryValue of categoryValues) {
-      const categoryData = groupedData.get(categoryValue)!;
-      const categorySheet = categorySheetMap.get(categoryValue)!;
-      await this.createCategorySheet(categorySheet, categoryValue, categoryData, style, summarySheet);
+      // 创建分类表（传入汇总表以便添加返回链接）
+      for (const categoryValue of categoryValues) {
+        const categoryData = groupedData.get(categoryValue)!;
+        const categorySheet = categorySheetMap.get(categoryValue)!;
+        await this.createCategorySheet(categorySheet, categoryValue, categoryData, style, summarySheet);
+      }
     }
 
     // 生成Excel文件并返回blob（不直接下载）
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     return blob;
+  }
+
+  // 创建单表输出（按分类分组，每个分类有小计，最后有总合计）
+  async createSingleSheetOutput(
+    workbook: ExcelJS.Workbook,
+    groupedData: Map<string, Array<{ data: any[], originalIndex: number }>>,
+    style: TableStyleConfig,
+    categoryValueTypes: Map<string, 'date' | 'string'>
+  ) {
+    const sheet = workbook.addWorksheet('汇总分类表');
+    // 单表输出时，使用所有表头（除了分类依据表头）
+    const categoryHeaders = this.categoryTableHeaders().length > 0
+      ? this.categoryTableHeaders()
+      : this.getRemainingHeadersForCategory();
+    const categoryHeader = this.categoryHeader()!;
+    const headerIndexMap = new Map<string, number>();
+    this.headers().forEach((header, index) => {
+      headerIndexMap.set(header, index);
+    });
+
+    // 添加标题行
+    const titleRow = sheet.addRow([`汇总分类表（按${categoryHeader}分类）`]);
+    titleRow.height = 25 * 0.75;
+    this.excelUtils.applyCellStyle(titleRow.getCell(1), style, 'title');
+    sheet.mergeCells(1, 1, 1, categoryHeaders.length);
+
+    // 添加表头行
+    const headerRow = sheet.addRow(categoryHeaders);
+    headerRow.height = 22 * 0.75;
+    headerRow.eachCell((cell, colNumber) => {
+      this.excelUtils.applyCellStyle(cell, style, 'header');
+    });
+
+    // 根据数据类型进行排序
+    const uniqueCategoryValues = Array.from(new Set(Array.from(groupedData.keys())));
+    const categoryValues = this.sortCategoryValues(uniqueCategoryValues, categoryValueTypes);
+
+    let currentRow = 3; // 第1行是标题，第2行是表头，数据从第3行开始
+    const categoryFooterFunctions = this.categoryFooterFunctions();
+    const hasCategoryFooter = categoryFooterFunctions.length > 0;
+    const categorySubtotalRows: number[] = []; // 存储每个分类小计行的行号
+
+    // 遍历每个分类
+    for (let categoryIndex = 0; categoryIndex < categoryValues.length; categoryIndex++) {
+      const categoryValue = categoryValues[categoryIndex];
+      const categoryData = groupedData.get(categoryValue)!;
+
+      // 添加分类标题行
+      const categoryTitleRow = sheet.addRow([categoryValue]);
+      categoryTitleRow.height = 22 * 0.75;
+      const titleCell = categoryTitleRow.getCell(1);
+      this.excelUtils.applyCellStyle(titleCell, style, 'header');
+      // 合并单元格
+      sheet.mergeCells(currentRow, 1, currentRow, categoryHeaders.length);
+      currentRow++;
+
+      const categoryStartRow = currentRow; // 该分类的第一行数据
+
+      // 添加分类数据行
+      for (const item of categoryData) {
+        const originalRowData = item.data;
+        const originalRowNumber = item.originalIndex;
+        const dataRow: any[] = [];
+        const formulaMap = new Map<number, string>();
+
+        for (let colIndex = 0; colIndex < categoryHeaders.length; colIndex++) {
+          const header = categoryHeaders[colIndex];
+          const headerIndex = headerIndexMap.get(header);
+
+          if (headerIndex !== undefined) {
+            // 从原始Excel获取单元格值
+            if (this.originalSheet && originalRowNumber > 0) {
+              let originalColNumber = -1;
+              this.originalSheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
+                if (String(cell.value || '').trim() === header) {
+                  originalColNumber = col;
+                }
+              });
+
+              if (originalColNumber !== -1) {
+                const originalCell = this.originalSheet.getRow(originalRowNumber).getCell(originalColNumber);
+
+                // 检查是否是公式
+                let formulaText = '';
+                if (originalCell.formula) {
+                  formulaText = originalCell.formula;
+                } else if (typeof originalCell.value === 'object' && originalCell.value !== null && 'formula' in originalCell.value) {
+                  formulaText = (originalCell.value as any).formula;
+                }
+
+                if (formulaText) {
+                  // 转换公式引用
+                  const convertedFormula = this.convertFormula(
+                    formulaText,
+                    originalRowNumber,
+                    currentRow,
+                    headerIndex,
+                    colIndex + 1,
+                    categoryHeaders,
+                    headerIndexMap,
+                    categoryData.length,
+                    categoryStartRow
+                  );
+
+                  if (convertedFormula) {
+                    formulaMap.set(colIndex + 1, convertedFormula);
+                    dataRow.push(null);
+                    continue;
+                  } else {
+                    dataRow.push('F-Null');
+                    continue;
+                  }
+                } else {
+                  // 不是公式，获取原始值
+                  const cellValue = originalCell.value;
+                  let finalValue: any = null;
+                  if (cellValue !== null && cellValue !== undefined) {
+                    if (typeof cellValue === 'number') {
+                      finalValue = cellValue;
+                    } else if (typeof cellValue === 'object' && 'text' in cellValue) {
+                      finalValue = (cellValue as any).text || '';
+                    } else if (cellValue instanceof Date) {
+                      finalValue = cellValue;
+                    } else {
+                      finalValue = cellValue;
+                    }
+                  } else if (originalCell.result !== null && originalCell.result !== undefined) {
+                    if (typeof originalCell.result === 'number') {
+                      finalValue = originalCell.result;
+                    } else {
+                      finalValue = originalCell.result;
+                    }
+                  } else {
+                    finalValue = '';
+                  }
+                  dataRow.push(finalValue);
+                  continue;
+                }
+              } else {
+                // 如果找不到原始列号，使用rawData中的值
+                const rawValue = originalRowData[headerIndex];
+                if (typeof rawValue === 'string' && rawValue.trim() !== '' && !isNaN(Number(rawValue)) && !isNaN(parseFloat(rawValue))) {
+                  const numValue = parseFloat(rawValue);
+                  dataRow.push(Number.isInteger(numValue) ? Math.floor(numValue) : numValue);
+                } else {
+                  dataRow.push(rawValue || '');
+                }
+              }
+            } else {
+              // 如果找不到原始列号，使用rawData中的值
+              const rawValue = originalRowData[headerIndex];
+              if (typeof rawValue === 'string' && rawValue.trim() !== '' && !isNaN(Number(rawValue)) && !isNaN(parseFloat(rawValue))) {
+                const numValue = parseFloat(rawValue);
+                dataRow.push(Number.isInteger(numValue) ? Math.floor(numValue) : numValue);
+              } else {
+                dataRow.push(rawValue || '');
+              }
+            }
+          } else {
+            dataRow.push('F-Null');
+          }
+        }
+
+        const sheetRow = sheet.addRow(dataRow);
+        sheetRow.height = 20 * 0.75;
+        for (let colNumber = 1; colNumber <= categoryHeaders.length; colNumber++) {
+          const cell = sheetRow.getCell(colNumber);
+          if (formulaMap.has(colNumber)) {
+            const formula = formulaMap.get(colNumber)!;
+            cell.value = { formula: formula };
+          }
+          this.excelUtils.applyCellStyle(cell, style, 'data');
+        }
+        currentRow++;
+      }
+
+      // 添加分类小计行（使用step4的表尾功能）
+      if (hasCategoryFooter) {
+        const footerRow: any[] = [];
+        const categoryEndRow = currentRow - 1; // 该分类的最后一行数据
+
+        for (const header of categoryHeaders) {
+          const footer = categoryFooterFunctions.find(f => f.header === header);
+          if (footer) {
+            const colName = this.getExcelColumnName(categoryHeaders.indexOf(header) + 1);
+            if (footer.type === '合计') {
+              footerRow.push({ formula: `SUM(${colName}${categoryStartRow}:${colName}${categoryEndRow})` });
+            } else if (footer.type === '平均值') {
+              footerRow.push({ formula: `AVERAGE(${colName}${categoryStartRow}:${colName}${categoryEndRow})` });
+            }
+          } else {
+            footerRow.push('');
+          }
+        }
+
+        // 在分类名称列显示"合计"
+        const categoryHeaderColIndex = categoryHeaders.indexOf(categoryHeader);
+        if (categoryHeaderColIndex >= 0) {
+          footerRow[categoryHeaderColIndex] = '合计';
+        }
+
+        const row = sheet.addRow(footerRow);
+        row.height = 22 * 0.75;
+        row.eachCell((cell, colNumber) => {
+          this.excelUtils.applyCellStyle(cell, style, 'total');
+        });
+        categorySubtotalRows.push(currentRow); // 记录小计行号
+        currentRow++;
+      }
+
+      // 如果不是最后一个分类，添加间隔行（合并单元格）
+      if (categoryIndex < categoryValues.length - 1) {
+        const spacerRow = sheet.addRow(['']);
+        spacerRow.height = 10 * 0.75;
+        const spacerCell = spacerRow.getCell(1);
+        spacerCell.style = {
+          fill: {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFFFFFF' } // 白色背景
+          }
+        };
+        // 合并单元格
+        sheet.mergeCells(currentRow, 1, currentRow, categoryHeaders.length);
+        currentRow++;
+      }
+    }
+
+    // 添加总合计行（使用step3的表尾功能）
+    const footerFunctions = this.footerFunctions();
+    if (footerFunctions.length > 0) {
+      const totalFooterRow: any[] = [];
+
+      for (const header of categoryHeaders) {
+        const footer = footerFunctions.find(f => f.header === header);
+        if (footer) {
+          const colName = this.getExcelColumnName(categoryHeaders.indexOf(header) + 1);
+          if (hasCategoryFooter && categorySubtotalRows.length > 0) {
+            // 如果有分类小计行，总合计应该是对所有小计行的合计
+            const subtotalRefs = categorySubtotalRows.map(row => `${colName}${row}`);
+            if (footer.type === '合计') {
+              totalFooterRow.push({ formula: `SUM(${subtotalRefs.join(',')})` });
+            } else if (footer.type === '平均值') {
+              totalFooterRow.push({ formula: `AVERAGE(${subtotalRefs.join(',')})` });
+            }
+          } else {
+            // 如果没有分类小计行，总合计是对所有数据行的合计
+            const dataStartRow = 3; // 数据从第3行开始
+            const dataEndRow = currentRow - 1; // 数据结束行
+            if (footer.type === '合计') {
+              totalFooterRow.push({ formula: `SUM(${colName}${dataStartRow}:${colName}${dataEndRow})` });
+            } else if (footer.type === '平均值') {
+              totalFooterRow.push({ formula: `AVERAGE(${colName}${dataStartRow}:${colName}${dataEndRow})` });
+            }
+          }
+        } else {
+          totalFooterRow.push('');
+        }
+      }
+
+      // 在分类名称列显示"总合计"
+      const categoryHeaderColIndex = categoryHeaders.indexOf(categoryHeader);
+      if (categoryHeaderColIndex >= 0) {
+        totalFooterRow[categoryHeaderColIndex] = '总合计';
+      }
+
+      const row = sheet.addRow(totalFooterRow);
+      row.height = 22 * 0.75;
+      row.eachCell((cell, colNumber) => {
+        this.excelUtils.applyCellStyle(cell, style, 'total');
+      });
+    }
+
+    // 自动调整列宽
+    this.autoFitColumns(sheet, categoryHeaders.length);
+
+    // 设置表头筛选器
+    sheet.autoFilter = {
+      from: { row: 2, column: 1 },
+      to: { row: currentRow, column: categoryHeaders.length }
+    };
   }
 
   // 创建汇总表
@@ -1366,7 +1642,8 @@ export class SummaryCategoryComponent implements AfterViewInit {
     categoryCol: number,
     categoryHeaders: string[],
     headerIndexMap: Map<string, number>,
-    categoryDataRowCount: number = 0
+    categoryDataRowCount: number = 0,
+    categoryStartRow: number = 0
   ): string | null {
     return this.excelUtils.convertFormula(
       formula,
@@ -1377,7 +1654,8 @@ export class SummaryCategoryComponent implements AfterViewInit {
       categoryHeaders,
       headerIndexMap,
       this.originalSheet,
-      categoryDataRowCount
+      categoryDataRowCount,
+      categoryStartRow
     );
   }
 

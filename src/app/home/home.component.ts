@@ -28,13 +28,6 @@ export class HomeComponent {
       description: '对Excel数据进行汇总和分类处理'
     },
     {
-      id: 'single-table-block',
-      title: '单表格处理',
-      route: '/single-table-block',
-      icon: 'table_chart',
-      description: '对Excel单个表格进行处理'
-    },
-    {
       id: 'multi-table-merge',
       title: '多表格数据合并',
       route: '/multi-table-merge',

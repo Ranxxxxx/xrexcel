@@ -24,13 +24,39 @@ export class ExcelUtilsService {
         'application/octet-stream' // 某些浏览器可能返回这个
       ];
 
-      if (!validTypes.includes(file.type) && !file.name.match(/\.(xlsx|xls)$/i)) {
-        throw new Error('不支持的文件格式，请上传 .xlsx 或 .xls 文件');
+      const isXlsx = file.name.match(/\.xlsx$/i);
+      const isXls = file.name.match(/\.xls$/i);
+
+      // 检查文件大小
+      if (file.size === 0) {
+        throw new Error('文件为空，请选择一个有效的Excel文件');
       }
 
       const arrayBuffer = await file.arrayBuffer();
+
+      // 验证文件签名（.xlsx文件是ZIP格式，以PK开头）
+      if (isXlsx) {
+        const uint8Array = new Uint8Array(arrayBuffer);
+        // .xlsx文件应该以ZIP文件签名开头：PK (50 4B)
+        if (uint8Array.length < 4 || uint8Array[0] !== 0x50 || uint8Array[1] !== 0x4B) {
+          throw new Error('文件格式不正确：该文件不是有效的 .xlsx 文件。请确保文件未损坏，并且确实是Excel文件。');
+        }
+      }
+
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(arrayBuffer);
+
+      try {
+        await workbook.xlsx.load(arrayBuffer);
+      } catch (loadError: any) {
+        // 处理ExcelJS加载错误
+        if (loadError?.message?.includes('zip') || loadError?.message?.includes('central directory')) {
+          throw new Error('无法读取Excel文件：文件可能已损坏或格式不正确。\n\n请尝试：\n1. 在Excel中打开并重新保存文件\n2. 确保文件是 .xlsx 格式（不是 .xls）\n3. 检查文件是否完整下载');
+        }
+        if (isXls && !isXlsx) {
+          throw new Error('检测到 .xls 格式文件。ExcelJS主要支持 .xlsx 格式。\n\n请将文件转换为 .xlsx 格式：\n1. 在Excel中打开文件\n2. 选择"另存为"\n3. 选择"Excel工作簿(.xlsx)"格式');
+        }
+        throw loadError;
+      }
 
       // 读取第一个sheet
       const firstSheet = workbook.worksheets[0];
@@ -280,7 +306,8 @@ export class ExcelUtilsService {
     categoryHeaders: string[],
     headerIndexMap: Map<string, number>,
     originalSheet: ExcelJS.Worksheet | null,
-    categoryDataRowCount: number = 0 // 分类表数据行数，用于限制行号范围
+    categoryDataRowCount: number = 0, // 分类表数据行数，用于限制行号范围
+    categoryStartRow: number = 0 // 当前分类的起始行号（单表输出模式使用）
   ): string | null {
     try {
       // 匹配单元格引用模式：$?列字母$?行号 或 范围引用
@@ -318,7 +345,8 @@ export class ExcelUtilsService {
             categoryHeaders,
             headerIndexMap,
             originalSheet,
-            categoryDataRowCount
+            categoryDataRowCount,
+            categoryStartRow
           ));
 
           if (convertedParts.some(p => p === null)) return null;
@@ -335,7 +363,8 @@ export class ExcelUtilsService {
             categoryHeaders,
             headerIndexMap,
             originalSheet,
-            categoryDataRowCount
+            categoryDataRowCount,
+            categoryStartRow
           );
           if (converted === null) return null;
 
@@ -361,7 +390,8 @@ export class ExcelUtilsService {
     categoryHeaders: string[],
     headerIndexMap: Map<string, number>,
     originalSheet: ExcelJS.Worksheet | null,
-    categoryDataRowCount: number = 0
+    categoryDataRowCount: number = 0,
+    categoryStartRow: number = 0
   ): string | null {
     // 提取列和行的绝对/相对引用标记
     const isAbsoluteCol = ref.startsWith('$');
@@ -432,14 +462,26 @@ export class ExcelUtilsService {
         // 引用数据行 -> 根据相对偏移计算
         const rowOffset = originalRowNum - originalRow;
         newRowNum = categoryRow + rowOffset;
-        // 确保行号在有效范围内：
-        // - 最小行号：第3行（表头行）
-        // - 最大行号：第(3+categoryDataRowCount)行（最后一行数据，不包括表尾行）
-        if (newRowNum < 3) {
+
+        // 确定有效行号范围
+        let minRow = 3; // 最小行号：表头行
+        let maxRow = 0; // 最大行号：根据模式确定
+
+        if (categoryStartRow > 0) {
+          // 单表输出模式：使用当前分类的起始行号和结束行号
+          minRow = categoryStartRow;
+          maxRow = categoryStartRow + categoryDataRowCount - 1;
+        } else {
+          // 多表输出模式：使用固定的起始行号3
+          maxRow = 3 + categoryDataRowCount;
+        }
+
+        // 确保行号在有效范围内
+        if (newRowNum < minRow) {
           return null;
         }
         // 如果转换后的行号超出了数据行范围，返回 null（避免引用表尾行造成循环引用）
-        if (categoryDataRowCount > 0 && newRowNum > 3 + categoryDataRowCount) {
+        if (categoryDataRowCount > 0 && maxRow > 0 && newRowNum > maxRow) {
           return null;
         }
       }
@@ -547,6 +589,161 @@ export class ExcelUtilsService {
       case 'total':
         return { horizontal: 'right' as const, vertical: 'middle' as const, wrapText: false };
     }
+  }
+
+  /**
+   * 读取Excel文件（多Sheet版本，用于单表格处理）
+   */
+  async readExcelFileMultiSheet(file: File): Promise<{
+    sheetNames: string[];
+    originalWorkbook: ExcelJS.Workbook;
+  }> {
+    try {
+      // 检查文件大小
+      if (file.size === 0) {
+        throw new Error('文件为空，请选择一个有效的Excel文件');
+      }
+
+      const isXlsx = file.name.match(/\.xlsx$/i);
+      const isXls = file.name.match(/\.xls$/i);
+
+      const arrayBuffer = await file.arrayBuffer();
+
+      // 验证文件签名（.xlsx文件是ZIP格式，以PK开头）
+      if (isXlsx) {
+        const uint8Array = new Uint8Array(arrayBuffer);
+        // .xlsx文件应该以ZIP文件签名开头：PK (50 4B)
+        if (uint8Array.length < 4 || uint8Array[0] !== 0x50 || uint8Array[1] !== 0x4B) {
+          throw new Error('文件格式不正确：该文件不是有效的 .xlsx 文件。请确保文件未损坏，并且确实是Excel文件。');
+        }
+      }
+
+      const workbook = new ExcelJS.Workbook();
+
+      try {
+        await workbook.xlsx.load(arrayBuffer);
+      } catch (loadError: any) {
+        // 处理ExcelJS加载错误
+        if (loadError?.message?.includes('zip') || loadError?.message?.includes('central directory')) {
+          throw new Error('无法读取Excel文件：文件可能已损坏或格式不正确。\n\n请尝试：\n1. 在Excel中打开并重新保存文件\n2. 确保文件是 .xlsx 格式（不是 .xls）\n3. 检查文件是否完整下载');
+        }
+        if (isXls && !isXlsx) {
+          throw new Error('检测到 .xls 格式文件。ExcelJS主要支持 .xlsx 格式。\n\n请将文件转换为 .xlsx 格式：\n1. 在Excel中打开文件\n2. 选择"另存为"\n3. 选择"Excel工作簿(.xlsx)"格式');
+        }
+        throw loadError;
+      }
+
+      // 获取所有sheet名称
+      const sheets = workbook.worksheets.map(sheet => sheet.name);
+      if (sheets.length === 0) {
+        throw new Error('Excel文件中没有找到工作表');
+      }
+
+      return {
+        sheetNames: sheets,
+        originalWorkbook: workbook
+      };
+    } catch (error: any) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(`读取文件时发生错误：${String(error)}`);
+    }
+  }
+
+  /**
+   * 生成默认预览数据
+   */
+  getDefaultPreviewData(): any[][] {
+    const headers = ['列1', '列2', '列3', '列4'];
+    const previewData: any[][] = [];
+
+    // 添加标题行（第一行，跨所有列）
+    const titleRow = ['示例表格标题', '', '', ''];
+    previewData.push(titleRow);
+
+    // 添加表头行
+    previewData.push(headers);
+
+    // 添加示例数据行
+    for (let i = 0; i < 3; i++) {
+      const row = headers.map((_, index) => `示例数据${index + 1}-${i + 1}`);
+      previewData.push(row);
+    }
+
+    // 添加合计行
+    const totalRow = ['合计', ...headers.slice(1).map(() => '100.00')];
+    previewData.push(totalRow);
+
+    return previewData;
+  }
+
+  /**
+   * 生成带进度条的文件下载
+   */
+  async downloadFileWithProgress(
+    generateFn: () => Promise<Blob>,
+    fileName: string,
+    progressCallback: (progress: number) => void
+  ): Promise<void> {
+    const startTime = Date.now();
+    const minDuration = 1000; // 最少1秒
+
+    // 开始生成Excel（返回blob，不直接下载）
+    const generatePromise = generateFn();
+
+    // 更新进度条
+    const progressInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed < minDuration) {
+        // 在1秒内，进度条从0到90%
+        const progress = Math.min(90, (elapsed / minDuration) * 90);
+        progressCallback(progress);
+      } else {
+        // 1秒后，等待生成完成
+        progressCallback(95);
+      }
+    }, 50);
+
+    // 等待生成完成
+    const blob = await generatePromise;
+
+    // 确保至少1秒
+    const elapsed = Date.now() - startTime;
+    if (elapsed < minDuration) {
+      await new Promise(resolve => setTimeout(resolve, minDuration - elapsed));
+    }
+
+    // 完成进度条
+    clearInterval(progressInterval);
+    progressCallback(100);
+
+    // 等待进度条动画完成后再下载（等待一小段时间确保进度条显示100%）
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // 现在触发下载
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${fileName}.xlsx`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  /**
+   * 生成默认输出文件名（基于原始文件名和时间戳）
+   */
+  generateDefaultFileName(originalFileName: string, suffix: string = ''): string {
+    const nameWithoutExt = originalFileName.replace(/\.[^/.]+$/, '');
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const timeString = `${year}${month}${day}_${hours}${minutes}${seconds}`;
+    return suffix ? `${nameWithoutExt}_${suffix}_${timeString}` : `${nameWithoutExt}_${timeString}`;
   }
 }
 

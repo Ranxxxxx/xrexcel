@@ -1,0 +1,44 @@
+@if (visible()) {
+  <div class="dialog-overlay" [class.no-close]="progress() > 0" (click)="onOverlayClick()">
+    <mat-card class="confirm-dialog" (click)="$event.stopPropagation()">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>info</mat-icon>
+          确认信息
+        </mat-card-title>
+      </mat-card-header>
+      <mat-card-content class="dialog-content">
+        @if (progress() === 0) {
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>文件名</mat-label>
+            <input
+              matInput
+              [value]="fileName()"
+              (input)="onFileNameChange($any($event.target).value)"
+              placeholder="请输入文件名">
+          </mat-form-field>
+        } @else {
+          <div class="progress-container">
+            <p class="progress-text">正在生成文件，请稍候...</p>
+            <mat-progress-bar mode="determinate" [value]="progress()"></mat-progress-bar>
+            <p class="progress-percent">{{ progress().toFixed(0) }}%</p>
+          </div>
+        }
+      </mat-card-content>
+      <mat-card-actions class="dialog-actions" align="end">
+        @if (progress() === 0) {
+          <button mat-button (click)="onClose()">取消</button>
+          <button
+            mat-raised-button
+            color="primary"
+            (click)="onConfirm()"
+            [disabled]="!fileName().trim()">
+            <mat-icon>play_arrow</mat-icon>
+            开始生成文件
+          </button>
+        }
+      </mat-card-actions>
+    </mat-card>
+  </div>
+}
+
