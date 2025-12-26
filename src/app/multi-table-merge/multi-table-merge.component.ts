@@ -1570,8 +1570,8 @@ export class MultiTableMergeComponent implements AfterViewInit {
       const originalHeaderRow = sourceTable === 'base' ? baseHeaderRow :
                                (sourceTable === 'dataSource' ? dataSourceHeaderRow : 1);
 
-      // 新表的表头行和数据起始行：如果更新汇总表，第1行是返回按钮，第2行是标题，第3行是表头，第4行开始是数据
-      // 否则，第1行是标题，第2行是表头，第3行开始是数据
+      // 新表的表头行和数据起始行：如果更新汇总表，第1行是返回链接，第2行是标题，第3行是表头，数据从第4行开始
+      // 否则，第1行是标题，第2行是表头，数据从第3行开始
       const NEW_HEADER_ROW = updateSummaryTable ? 3 : 2;
       const NEW_DATA_START_ROW = updateSummaryTable ? 4 : 3;
 

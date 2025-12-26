@@ -150,7 +150,12 @@ export class SummaryCategoryComponent implements AfterViewInit {
       await this.readExcelFile(this.selectedFile);
     } catch (error: any) {
       const errorMessage = error?.message || '未知错误';
-      alert(`读取Excel文件失败：${errorMessage}\n\n请确保：\n1. 文件格式为 .xlsx\n2. 文件未损坏\n3. 文件包含至少一个工作表`);
+      alert(`读取Excel文件失败：${errorMessage}
+
+请确保：
+1. 文件格式为 .xlsx
+2. 文件未损坏
+3. 文件包含至少一个工作表`);
     } finally {
       this.isUploading.set(false);
     }
@@ -752,6 +757,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
     const groupedData = new Map<string, Array<{ data: any[], originalIndex: number }>>();
     const categoryValueTypes = new Map<string, 'date' | 'string'>(); // 存储每个分类值的数据类型
 
+    // 优化：批量处理分组和类型检测
     for (const item of deduplicatedRawData) {
       const categoryValue = item.data[categoryHeaderIndex] || '';
 
@@ -866,6 +872,18 @@ export class SummaryCategoryComponent implements AfterViewInit {
 
       const categoryStartRow = currentRow; // 该分类的第一行数据
 
+      // 预先获取原始表头映射，避免在循环中重复查找
+      const originalHeaderRow = this.originalSheet ? this.originalSheet.getRow(1) : null;
+      const originalHeaderMap = new Map<string, number>();
+      if (originalHeaderRow) {
+        originalHeaderRow.eachCell({ includeEmpty: true }, (cell, col) => {
+          const headerName = String(cell.value || '').trim();
+          if (headerName) {
+            originalHeaderMap.set(headerName, col);
+          }
+        });
+      }
+
       // 添加分类数据行
       for (const item of categoryData) {
         const originalRowData = item.data;
@@ -880,12 +898,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
           if (headerIndex !== undefined) {
             // 从原始Excel获取单元格值
             if (this.originalSheet && originalRowNumber > 0) {
-              let originalColNumber = -1;
-              this.originalSheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
-                if (String(cell.value || '').trim() === header) {
-                  originalColNumber = col;
-                }
-              });
+              const originalColNumber = originalHeaderMap.get(header) || -1;
 
               if (originalColNumber !== -1) {
                 const originalCell = this.originalSheet.getRow(originalRowNumber).getCell(originalColNumber);
@@ -1015,12 +1028,10 @@ export class SummaryCategoryComponent implements AfterViewInit {
         const spacerRow = sheet.addRow(['']);
         spacerRow.height = 10 * 0.75;
         const spacerCell = spacerRow.getCell(1);
-        spacerCell.style = {
-          fill: {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: { argb: 'FFFFFFFF' } // 白色背景
-          }
+        spacerCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFFFFFFF' } // 白色背景
         };
         // 合并单元格
         sheet.mergeCells(currentRow, 1, currentRow, categoryHeaders.length);
@@ -1422,6 +1433,18 @@ export class SummaryCategoryComponent implements AfterViewInit {
       this.excelUtils.applyCellStyle(cell, style, 'header');
     });
 
+    // 预先获取原始表头映射，避免在循环中重复查找
+    const originalHeaderRow = this.originalSheet ? this.originalSheet.getRow(1) : null;
+    const originalHeaderMap = new Map<string, number>();
+    if (originalHeaderRow) {
+      originalHeaderRow.eachCell({ includeEmpty: true }, (cell, col) => {
+        const headerName = String(cell.value || '').trim();
+        if (headerName) {
+          originalHeaderMap.set(headerName, col);
+        }
+      });
+    }
+
     let currentCategoryRow = 4; // 分类表数据从第4行开始
     for (const item of categoryData) {
       const originalRowData = item.data;
@@ -1436,13 +1459,7 @@ export class SummaryCategoryComponent implements AfterViewInit {
         if (headerIndex !== undefined) {
           // 核心逻辑：从 originalSheet 直接获取单元格对象
           if (this.originalSheet && originalRowNumber > 0) {
-            // 找到该表头在原表中的物理列号
-            let originalColNumber = -1;
-            this.originalSheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
-              if (String(cell.value || '').trim() === header) {
-                originalColNumber = col;
-              }
-            });
+            const originalColNumber = originalHeaderMap.get(header) || -1;
 
             if (originalColNumber !== -1) {
               const originalCell = this.originalSheet.getRow(originalRowNumber).getCell(originalColNumber);
@@ -1503,56 +1520,19 @@ export class SummaryCategoryComponent implements AfterViewInit {
                 continue; // 跳过后续的普通值处理
               }
             } else {
-              // 如果找不到原始列号，尝试从 originalSheet 获取原始值（作为后备）
-              // 先尝试从 originalSheet 获取
-              if (this.originalSheet && originalRowNumber > 0) {
-                // 尝试通过 headerIndex 找到对应的列
-                let foundCell: ExcelJS.Cell | null = null;
-                this.originalSheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
-                  if (String(cell.value || '').trim() === header) {
-                    foundCell = this.originalSheet!.getRow(originalRowNumber).getCell(col);
-                  }
-                });
-                if (foundCell !== null) {
-                  const cellValue = (foundCell as ExcelJS.Cell).value;
-                  if (typeof cellValue === 'number') {
-                    dataRow.push(cellValue);
-                  } else if (cellValue !== null && cellValue !== undefined) {
-                    dataRow.push(cellValue);
-                  } else {
-                    dataRow.push(originalRowData[headerIndex] || '');
-                  }
+              // 如果找不到原始列号，使用 rawData 中的值（作为后备）
+              const rawValue = originalRowData[headerIndex];
+              // 尝试将字符串数字转换为数字
+              if (typeof rawValue === 'string' && rawValue.trim() !== '' && !isNaN(Number(rawValue)) && !isNaN(parseFloat(rawValue))) {
+                const numValue = parseFloat(rawValue);
+                // 检查是否是整数
+                if (Number.isInteger(numValue)) {
+                  dataRow.push(Math.floor(numValue));
                 } else {
-                  // 如果还是找不到，使用 rawData 中的值（作为最后的后备）
-                  const rawValue = originalRowData[headerIndex];
-                  // 尝试将字符串数字转换为数字
-                  if (typeof rawValue === 'string' && rawValue.trim() !== '' && !isNaN(Number(rawValue)) && !isNaN(parseFloat(rawValue))) {
-                    const numValue = parseFloat(rawValue);
-                    // 检查是否是整数
-                    if (Number.isInteger(numValue)) {
-                      dataRow.push(Math.floor(numValue));
-                    } else {
-                      dataRow.push(numValue);
-                    }
-                  } else {
-                    dataRow.push(rawValue || '');
-                  }
+                  dataRow.push(numValue);
                 }
               } else {
-                // 如果找不到原始列号，使用 rawData 中的值（作为后备）
-                const rawValue = originalRowData[headerIndex];
-                // 尝试将字符串数字转换为数字
-                if (typeof rawValue === 'string' && rawValue.trim() !== '' && !isNaN(Number(rawValue)) && !isNaN(parseFloat(rawValue))) {
-                  const numValue = parseFloat(rawValue);
-                  // 检查是否是整数
-                  if (Number.isInteger(numValue)) {
-                    dataRow.push(Math.floor(numValue));
-                  } else {
-                    dataRow.push(numValue);
-                  }
-                } else {
-                  dataRow.push(rawValue || '');
-                }
+                dataRow.push(rawValue || '');
               }
             }
           } else {

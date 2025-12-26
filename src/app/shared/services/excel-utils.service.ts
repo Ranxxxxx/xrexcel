@@ -100,67 +100,21 @@ export class ExcelUtilsService {
         const rowData: any[] = [];
         let hasData = false;
 
-        row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-          const cellValue = cell.value;
-          let cellText = '';
+        // 优化单元格读取：使用 getCellValue 方法
+        for (let colNumber = 1; colNumber <= headers.length; colNumber++) {
+          const cell = row.getCell(colNumber);
+          const cellValue = this.getCellValue(cell);
 
-          // 优先检查是否有公式：如果有公式，使用公式而不是计算结果
+          // 如果单元格包含公式，优先使用公式
+          let cellText = '';
           if (cell.formula) {
-            // 单元格包含公式，使用公式字符串
             cellText = cell.formula;
-          } else if (cellValue !== null && cellValue !== undefined) {
-            if (typeof cellValue === 'string') {
-              cellText = cellValue.trim();
-            } else if (typeof cellValue === 'number') {
-              cellText = String(cellValue);
-            } else if (cellValue instanceof Date) {
-              cellText = cellValue.toLocaleDateString();
-            } else if (typeof cellValue === 'object') {
-              // 处理对象类型的值（如公式结果、超链接等）
-              // 检查对象中是否包含公式
-              if ('formula' in cellValue && (cellValue as any).formula) {
-                cellText = String((cellValue as any).formula);
-              } else if (cell.text) {
-                // 如果没有公式，使用文本值（可能是超链接文本）
-                cellText = cell.text.trim();
-              } else if ('text' in cellValue) {
-                // 如果是超链接对象，尝试获取文本
-                cellText = String((cellValue as any).text || '').trim();
-              } else {
-                // 最后才使用计算结果（如果没有公式）
-                if (cell.result !== null && cell.result !== undefined) {
-                  if (typeof cell.result === 'number') {
-                    cellText = String(cell.result);
-                  } else if (typeof cell.result === 'string') {
-                    cellText = cell.result.trim();
-                  } else {
-                    cellText = String(cell.result);
-                  }
-                } else {
-                  cellText = '';
-                }
-              }
-            } else {
-              cellText = String(cellValue).trim();
-            }
           } else {
-            // 如果value为空，检查是否有公式
-            if (cell.formula) {
-              cellText = cell.formula;
-            } else if (cell.text) {
-              cellText = cell.text.trim();
-            } else {
-              cellText = '';
-            }
+            cellText = String(cellValue || '').toString().trim();
           }
 
           rowData.push(cellText);
           if (cellText) hasData = true;
-        });
-
-        // 如果行数据不足表头数量，补齐空值
-        while (rowData.length < headers.length) {
-          rowData.push('');
         }
 
         // 只添加有数据的行
@@ -188,13 +142,44 @@ export class ExcelUtilsService {
    * 获取单元格值
    */
   getCellValue(cell: ExcelJS.Cell): any {
-    if (cell.value === null || cell.value === undefined) {
-      return cell.text || '';
+    // 优先返回原始值
+    if (cell.value !== null && cell.value !== undefined) {
+      // 处理公式单元格
+      if (cell.formula && !cell.result) {
+        return cell.formula;
+      }
+
+      // 处理对象类型的值
+      if (typeof cell.value === 'object') {
+        // 如果是日期类型，返回日期对象
+        if (cell.value instanceof Date) {
+          return cell.value;
+        }
+
+        // 如果对象有text属性，返回text
+        if ('text' in cell.value && (cell.value as any).text) {
+          return (cell.value as any).text;
+        }
+
+        // 如果是公式对象，返回公式
+        if ('formula' in cell.value && (cell.value as any).formula) {
+          return (cell.value as any).formula;
+        }
+
+        // 返回原始值
+        return cell.value;
+      }
+
+      // 返回原始值
+      return cell.value;
     }
-    if (typeof cell.value === 'object' && 'text' in cell.value) {
-      return (cell.value as any).text || '';
+
+    // 如果没有原始值，返回计算结果或文本
+    if (cell.result !== null && cell.result !== undefined) {
+      return cell.result;
     }
-    return cell.value;
+
+    return cell.text || '';
   }
 
   /**
@@ -228,6 +213,7 @@ export class ExcelUtilsService {
     // Excel列宽单位：1个字符宽度 ≈ 7像素（对于默认字体）
     // 左右各20像素 = 40像素 ≈ 5.7个字符宽度
     const paddingChars = 40 / 7; // 左右各20像素的字符宽度
+    const maxWidth = 100; // 最大列宽限制
 
     for (let col = 1; col <= columnCount; col++) {
       const column = sheet.getColumn(col);
@@ -236,42 +222,32 @@ export class ExcelUtilsService {
       // 遍历该列的所有单元格，找出最大内容长度
       sheet.eachRow((row, rowNumber) => {
         const cell = row.getCell(col);
-        let cellText = '';
-        let isNumber = false;
 
-        if (cell.value !== null && cell.value !== undefined) {
-          if (typeof cell.value === 'number') {
-            // 数字类型：按数字格式计算宽度
-            cellText = String(cell.value);
-            isNumber = true;
-          } else if (typeof cell.value === 'string') {
-            cellText = cell.value;
-          } else if (cell.value instanceof Date) {
-            cellText = cell.value.toLocaleDateString();
-          } else if (typeof cell.value === 'object' && 'text' in cell.value) {
-            cellText = (cell.value as any).text || '';
+        // 获取单元格值，优先考虑原始值而不是显示文本
+        let cellValue = this.getCellValue(cell);
+
+        if (cellValue !== null && cellValue !== undefined) {
+          let cellText = String(cellValue);
+
+          // 如果单元格是数字类型，使用原始值计算宽度
+          if (typeof cellValue === 'number') {
+            // 数字类型：按实际字符数计算
+            maxLength = Math.max(maxLength, cellText.length);
           } else {
-            cellText = String(cell.value);
+            // 文本类型：中文字符按2个字符宽度计算
+            maxLength = Math.max(maxLength, this.calculateTextWidth(cellText));
           }
-        } else if (cell.text) {
-          cellText = cell.text;
         }
 
-        // 计算文本长度
-        let textLength: number;
-        if (isNumber) {
-          // 数字类型：按实际字符数计算
-          textLength = cellText.length;
-        } else {
-          // 文本类型：中文字符按2个字符宽度计算
-          textLength = this.calculateTextWidth(cellText);
+        // 检查是否是公式，使用公式字符串计算宽度
+        if (cell.formula) {
+          maxLength = Math.max(maxLength, this.calculateTextWidth(String(cell.formula)));
         }
-        maxLength = Math.max(maxLength, textLength);
       });
 
       // 设置列宽 = 最大内容宽度 + 左右各20像素的空间
       const baseWidth = maxLength + paddingChars;
-      column.width = Math.max(8, baseWidth); // 最小宽度8
+      column.width = Math.min(maxWidth, Math.max(8, baseWidth)); // 最小宽度8，最大宽度限制
     }
   }
 
@@ -280,17 +256,13 @@ export class ExcelUtilsService {
    */
   calculateTextWidth(text: string): number {
     if (!text) return 0;
-    let width = 0;
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      // 判断是否为中文字符、日文、韩文等宽字符
-      if (/[\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(char)) {
-        width += 2; // 中文字符占2个字符宽度
-      } else {
-        width += 1; // 英文字符占1个字符宽度
-      }
-    }
-    return width;
+
+    // 使用更高效的正则表达式，避免在循环中重复编译
+    const wideCharRegex = /[一-龥぀-ゟ゠-ヿ가-힯]/g;
+    const wideCharCount = (text.match(wideCharRegex) || []).length;
+    const narrowCharCount = text.length - wideCharCount;
+
+    return narrowCharCount + (wideCharCount * 2);
   }
 
   /**
@@ -896,12 +868,6 @@ export class ExcelUtilsService {
 
     // 等待生成完成
     const blob = await generatePromise;
-
-    // 确保至少1秒
-    const elapsed = Date.now() - startTime;
-    if (elapsed < minDuration) {
-      await new Promise(resolve => setTimeout(resolve, minDuration - elapsed));
-    }
 
     // 完成进度条
     clearInterval(progressInterval);
