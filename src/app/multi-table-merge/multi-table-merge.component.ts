@@ -17,8 +17,6 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DragDropModule, CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
-import { CdkTreeModule, NestedTreeControl } from '@angular/cdk/tree';
-import { MatTreeModule, MatTreeNestedDataSource } from '@angular/material/tree';
 import { TableStyleConfig, DEFAULT_TABLE_STYLE } from '../shared/models/table-style.model';
 import { TableStylePreviewComponent } from '../shared/components/table-style-preview/table-style-preview.component';
 import { TableStyleStorageService } from '../shared/services/table-style-storage.service';
@@ -26,15 +24,6 @@ import { FileUploadComponent } from '../shared/components/file-upload/file-uploa
 import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/confirm-dialog.component';
 import { ExcelUtilsService } from '../shared/services/excel-utils.service';
 import * as ExcelJS from 'exceljs';
-import * as JSZip from 'jszip';
-
-// Zip文件树节点接口
-interface ZipFileTreeNode {
-  name: string;
-  path: string;
-  isFile: boolean;
-  children?: ZipFileTreeNode[];
-}
 
 @Component({
   selector: 'app-multi-table-merge',
@@ -58,8 +47,6 @@ interface ZipFileTreeNode {
     MatRadioModule,
     MatTooltipModule,
     DragDropModule,
-    CdkTreeModule,
-    MatTreeModule,
     TableStylePreviewComponent,
     FileUploadComponent,
     ConfirmDialogComponent
@@ -84,14 +71,6 @@ export class MultiTableMergeComponent implements AfterViewInit {
   isUploadingDataSourceFile = signal<boolean>(false);
   baseWorkbook = signal<ExcelJS.Workbook | null>(null); // 基础文件工作簿
   dataSourceWorkbook = signal<ExcelJS.Workbook | null>(null); // 数据源文件工作簿
-  dataSourceType = signal<'table' | 'zip'>('table'); // 数据源类型：表格或压缩包
-
-  // Zip文件相关
-  zipFileTree = signal<ZipFileTreeNode[]>([]); // zip文件树结构
-  selectedZipFiles = signal<string[]>([]); // 选中的zip文件路径列表
-  zipTreeControl = new NestedTreeControl<ZipFileTreeNode>(node => node?.children || []);
-  zipTreeDataSource = new MatTreeNestedDataSource<ZipFileTreeNode>();
-  zipObject = signal<any>(null); // zip对象，用于后续读取文件
 
   // Step 2: 设置合并目标
   baseSheetNames = signal<string[]>([]); // 基础文件的sheet列表
@@ -141,22 +120,6 @@ export class MultiTableMergeComponent implements AfterViewInit {
       const mappings = this.headerMappings();
       if (this.viewInitialized()) {
         setTimeout(() => this.updateConnectionLines(), 100);
-      }
-    });
-
-    // 监听dataSourceType变化，重置相关数据
-    effect(() => {
-      const type = this.dataSourceType();
-      // 当类型切换时，清空已选择的文件和文件树
-      if (type === 'table') {
-        this.zipFileTree.set([]);
-        this.selectedZipFiles.set([]);
-        this.zipTreeDataSource.data = [];
-        this.zipObject.set(null);
-      } else {
-        this.dataSourceSheetNames.set([]);
-        this.selectedDataSourceSheets.set([]);
-        this.dataSourceWorkbook.set(null);
       }
     });
   }
@@ -230,20 +193,10 @@ export class MultiTableMergeComponent implements AfterViewInit {
     this.dataSourceFile.set(file);
     this.isUploadingDataSourceFile.set(true);
     try {
-      if (this.dataSourceType() === 'zip') {
-        // 处理zip文件
-        await this.handleZipFile(file);
-      } else {
-        // 处理Excel文件
-        const result = await this.excelUtils.readExcelFileMultiSheet(file);
-        this.dataSourceSheetNames.set(result.sheetNames);
-        this.dataSourceWorkbook.set(result.originalWorkbook);
-      // 重置zip相关数据
-      this.zipFileTree.set([]);
-      this.selectedZipFiles.set([]);
-      this.zipTreeDataSource.data = [];
-      this.zipObject.set(null);
-      }
+      // 处理Excel文件
+      const result = await this.excelUtils.readExcelFileMultiSheet(file);
+      this.dataSourceSheetNames.set(result.sheetNames);
+      this.dataSourceWorkbook.set(result.originalWorkbook);
       // 重置step2的选择状态
       this.selectedDataSourceSheets.set([]);
       this.dataSourceHeaderRow.set(1);
@@ -255,93 +208,8 @@ export class MultiTableMergeComponent implements AfterViewInit {
       this.dataSourceFile.set(null);
       this.dataSourceSheetNames.set([]);
       this.dataSourceWorkbook.set(null);
-      this.zipFileTree.set([]);
-      this.selectedZipFiles.set([]);
-      this.zipTreeDataSource.data = [];
-      this.zipObject.set(null);
     } finally {
       this.isUploadingDataSourceFile.set(false);
-    }
-  }
-
-  // 处理zip文件
-  private async handleZipFile(file: File) {
-    try {
-      const zip = await JSZip.loadAsync(file);
-      this.zipObject.set(zip); // 保存zip对象
-      const fileMap = new Map<string, { name: string; path: string; isFile: boolean; children?: Map<string, any> }>();
-
-      // 遍历zip中的所有文件（只处理文件，忽略目录条目）
-      zip.forEach((relativePath, zipEntry) => {
-        // 跳过目录条目（以/结尾的路径）
-        if (zipEntry.dir || relativePath.endsWith('/')) {
-          return;
-        }
-
-        // 处理文件路径
-        const parts = relativePath.split('/').filter(p => p);
-        if (parts.length === 0) return;
-
-        const fileName = parts[parts.length - 1];
-        let currentMap = fileMap;
-
-        // 创建目录结构
-        for (let i = 0; i < parts.length - 1; i++) {
-          const part = parts[i];
-          const dirPath = parts.slice(0, i + 1).join('/');
-
-          if (!currentMap.has(dirPath)) {
-            currentMap.set(dirPath, {
-              name: part,
-              path: dirPath,
-              isFile: false,
-              children: new Map()
-            });
-          }
-          const node = currentMap.get(dirPath)!;
-          if (!node.children) {
-            node.children = new Map();
-          }
-          currentMap = node.children as Map<string, any>;
-        }
-
-        // 添加文件
-        const filePath = relativePath;
-        currentMap.set(filePath, {
-          name: fileName,
-          path: filePath,
-          isFile: true
-        });
-      });
-
-      // 将Map结构转换为数组结构
-      const convertMapToArray = (map: Map<string, any>): ZipFileTreeNode[] => {
-        const result: ZipFileTreeNode[] = [];
-        for (const [path, node] of map.entries()) {
-          const item: ZipFileTreeNode = {
-            name: node.name,
-            path: node.path,
-            isFile: node.isFile
-          };
-          if (node.children && node.children.size > 0) {
-            item.children = convertMapToArray(node.children);
-          }
-          result.push(item);
-        }
-        return result.sort((a, b) => {
-          // 目录在前，文件在后
-          if (a.isFile !== b.isFile) {
-            return a.isFile ? 1 : -1;
-          }
-          return a.name.localeCompare(b.name);
-        });
-      };
-
-      const treeData = convertMapToArray(fileMap);
-      this.zipFileTree.set(treeData);
-      this.zipTreeDataSource.data = treeData;
-    } catch (error: any) {
-      throw new Error(`解压zip文件失败：${error.message || '未知错误'}`);
     }
   }
 
@@ -560,51 +428,13 @@ export class MultiTableMergeComponent implements AfterViewInit {
     return this.selectedBaseSheets().length > 0;
   }
 
-  // 检查是否显示zip文件树（当数据源类型为zip时）
-  shouldShowZipFileTree(): boolean {
-    return this.dataSourceType() === 'zip' && this.zipFileTree().length > 0;
-  }
-
-  // 切换zip文件选择
-  toggleZipFileSelection(filePath: string) {
-    const selected = this.selectedZipFiles();
-    if (selected.includes(filePath)) {
-      this.selectedZipFiles.set(selected.filter(p => p !== filePath));
-    } else {
-      this.selectedZipFiles.set([...selected, filePath]);
-    }
-  }
-
-  // 检查zip文件是否被选中
-  isZipFileSelected(filePath: string): boolean {
-    return this.selectedZipFiles().includes(filePath);
-  }
-
-  // CDK Tree 需要的方法：检查节点是否有子节点
-  hasChild = (_: number, node: ZipFileTreeNode | null | undefined): boolean => {
-    if (!node) return false;
-    return !!node.children && node.children.length > 0;
-  };
-
   // 检查是否显示表头排序区域（当有选中的表头时）
   shouldShowHeaderSortSection(): boolean {
     return this.sortedHeaders().length > 0;
   }
 
-  // 检查step2是否应该显示"完成"按钮（当选择压缩包且左侧已选择sheet和表头时）
-  shouldShowCompleteInStep2(): boolean {
-    return this.dataSourceType() === 'zip' &&
-           this.selectedBaseSheets().length > 0 &&
-           this.sortedHeaders().length > 0;
-  }
-
-  // 检查step2是否应该显示"下一步"按钮（当不是zip类型，或者zip类型但未满足完成条件时）
+  // 检查step2是否应该显示"下一步"按钮
   shouldShowNextInStep2(): boolean {
-    // 如果是zip类型，只有在不满足完成条件时才显示下一步
-    if (this.dataSourceType() === 'zip') {
-      return !this.shouldShowCompleteInStep2() && this.shouldShowHeaderSortSection();
-    }
-    // 非zip类型，按原来的逻辑
     return this.shouldShowHeaderSortSection();
   }
 
@@ -856,12 +686,9 @@ export class MultiTableMergeComponent implements AfterViewInit {
       return;
     }
 
-    // 如果是zip类型，不需要检查数据源sheet
-    if (this.dataSourceType() !== 'zip') {
-      if (this.selectedDataSourceSheets().length === 0) {
-        alert('请先选择数据源文件的Sheet');
-        return;
-      }
+    if (this.selectedDataSourceSheets().length === 0) {
+      alert('请先选择数据源文件的Sheet');
+      return;
     }
 
     if (this.sortedHeaders().length === 0) {
@@ -926,15 +753,6 @@ export class MultiTableMergeComponent implements AfterViewInit {
     const unmatchedSheets: string[] = []; // 记录未匹配的sheet
     const mergedSheetMap = new Map<string, ExcelJS.Worksheet>(); // 存储合并表映射，用于汇总表引用
     const mergedSheetDataRowCountMap = new Map<string, number>(); // 存储每个合并表的数据行数
-
-    // 如果是zip类型，处理压缩包文件
-    if (this.dataSourceType() === 'zip') {
-      await this.handleZipGeneration(newWorkbook, baseWorkbook, selectedBaseSheets, sortedHeaders, baseHeaderRow, style);
-      // zip类型处理完成后，直接生成文件
-      const buffer = await newWorkbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      return blob;
-    }
 
     // 如果更新汇总表，先创建汇总表（作为第一个sheet）
     let summarySheet: ExcelJS.Worksheet | null = null;
@@ -1308,245 +1126,6 @@ export class MultiTableMergeComponent implements AfterViewInit {
     const buffer = await newWorkbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     return blob;
-  }
-
-  // 处理zip类型的文件生成
-  private async handleZipGeneration(
-    newWorkbook: ExcelJS.Workbook,
-    baseWorkbook: ExcelJS.Workbook,
-    selectedBaseSheets: string[],
-    sortedHeaders: string[],
-    baseHeaderRow: number,
-    style: TableStyleConfig
-  ) {
-    const zip = this.zipObject();
-    if (!zip) {
-      throw new Error('未找到zip文件对象');
-    }
-
-    // 遍历选中的基础文件sheet
-    for (const baseSheetName of selectedBaseSheets) {
-      const baseSheet = baseWorkbook.getWorksheet(baseSheetName);
-      if (!baseSheet) continue;
-
-      // 读取基础文件的表头映射
-      const baseHeadersMap = this.excelUtils.readHeadersMap(baseSheet, baseHeaderRow, true);
-
-      // 创建新的sheet（使用基础sheet名称）
-      const newSheet = newWorkbook.addWorksheet(baseSheetName);
-
-      // 复制基础sheet的所有数据
-      let currentRow = 1;
-      for (let rowNum = 1; rowNum <= baseSheet.rowCount; rowNum++) {
-        const sourceRow = baseSheet.getRow(rowNum);
-        if (!sourceRow || sourceRow.cellCount === 0) continue;
-
-        const rowData: any[] = [];
-        let hasData = false;
-
-        // 读取该行的所有数据
-        sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-          const cellValue = this.excelUtils.getCellValueWithFormula(cell, baseSheet, rowNum, colNumber);
-          rowData.push(cellValue || '');
-          if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
-            hasData = true;
-          }
-        });
-
-        if (hasData || rowNum <= baseHeaderRow) {
-          const targetRow = newSheet.addRow(rowData);
-          targetRow.height = sourceRow.height || 20 * 0.75;
-
-          // 复制样式
-          sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            const targetCell = targetRow.getCell(colNumber);
-            if (cell.font) targetCell.font = { ...cell.font };
-            if (cell.fill) targetCell.fill = { ...cell.fill };
-            if (cell.alignment) targetCell.alignment = { ...cell.alignment };
-            if (cell.border) targetCell.border = { ...cell.border };
-            if (cell.numFmt) targetCell.numFmt = cell.numFmt;
-          });
-
-          currentRow++;
-        }
-      }
-
-      // 处理表头行的数据，查找zip文件并创建sheet
-      const monthSheetMap = new Map<string, ExcelJS.Worksheet>(); // 月份 -> sheet映射
-
-      // 遍历选中的表头
-      for (const header of sortedHeaders) {
-        // 找到该表头对应的列号
-        let headerColNumber = 0;
-        for (const [colNum, headerName] of baseHeadersMap.entries()) {
-          if (headerName === header) {
-            headerColNumber = colNum;
-            break;
-          }
-        }
-
-        if (headerColNumber === 0) continue;
-
-        // 读取表头行的数据（该列的值）- 注意：这里读取的是表头行中该单元格的值，不是表头名称
-        const headerRow = baseSheet.getRow(baseHeaderRow);
-        const headerCell = headerRow.getCell(headerColNumber);
-        // 获取单元格的显示文本值（可能是超链接文本）
-        let headerValueStr = '';
-        if (headerCell.value && typeof headerCell.value === 'object' && 'text' in headerCell.value) {
-          headerValueStr = String((headerCell.value as any).text || '').trim();
-        } else {
-          headerValueStr = String(this.excelUtils.getCellValue(headerCell) || '').trim();
-        }
-
-        // 如果包含[]，跳过
-        if (headerValueStr.includes('[') && headerValueStr.includes(']')) {
-          continue;
-        }
-
-        // 根据\拆分路径，格式为[根目录, 月份，文件名]
-        const pathParts = headerValueStr.split('\\').filter(p => p.trim());
-        if (pathParts.length < 3) {
-          continue; // 路径格式不正确，跳过
-        }
-
-        const rootDir = pathParts[0].trim();
-        const month = pathParts[1].trim();
-        const fileName = pathParts.slice(2).join('\\').trim(); // 文件名可能包含路径
-
-        // 构建完整的zip文件路径（zip内部使用正斜杠，所以需要转换）
-        const zipFilePath = `${rootDir}/${month}/${fileName.replace(/\\/g, '/')}`;
-
-        // 在zip文件中查找匹配的文件
-        let zipFile: any = zip.file(zipFilePath);
-        if (!zipFile) {
-          // 尝试查找不区分大小写的匹配
-          zip.forEach((relativePath: string, zipEntry: any) => {
-            if (relativePath.toLowerCase() === zipFilePath.toLowerCase()) {
-              zipFile = zipEntry;
-            }
-          });
-        }
-        if (!zipFile) {
-          continue; // 未找到文件，跳过
-        }
-
-        // 获取或创建月份sheet
-        let monthSheet = monthSheetMap.get(month);
-        if (!monthSheet) {
-          // 检查sheet是否已存在
-          const existingSheet = newWorkbook.getWorksheet(month);
-          if (existingSheet) {
-            monthSheet = existingSheet;
-          } else {
-            monthSheet = newWorkbook.addWorksheet(month);
-            // 添加标题行
-            const titleRow = monthSheet.addRow([month]);
-            titleRow.height = 25 * 0.75;
-            this.excelUtils.applyCellStyle(titleRow.getCell(1), style, 'title');
-            monthSheet.mergeCells(1, 1, 1, 10); // 假设最多10列
-          }
-          monthSheetMap.set(month, monthSheet);
-        }
-
-        // 读取zip文件内容
-        try {
-          const fileContent = await zipFile.async('string');
-
-          // 尝试将文件内容作为Excel读取
-          let fileWorkbook: ExcelJS.Workbook | null = null;
-          try {
-            const arrayBuffer = await zipFile.async('arraybuffer');
-            fileWorkbook = new ExcelJS.Workbook();
-            await fileWorkbook.xlsx.load(arrayBuffer);
-          } catch (e) {
-            // 如果不是Excel文件，将内容作为文本插入
-            const dataRow = monthSheet.addRow([fileName, fileContent]);
-            dataRow.height = 20 * 0.75;
-            dataRow.eachCell((cell) => {
-              this.excelUtils.applyCellStyle(cell, style, 'data');
-            });
-            // 设置超链接（在continue之前）
-            const targetCell = newSheet.getRow(baseHeaderRow).getCell(headerColNumber);
-            const sheetName = month.includes(' ') || month.includes('-') || month.includes('[') || month.includes(']')
-              ? `'${month.replace(/'/g, "''")}'`
-              : month;
-            targetCell.value = {
-              text: headerValueStr,
-              hyperlink: `#${sheetName}!A1`
-            };
-            targetCell.font = {
-              name: style.fontFamily,
-              size: style.headerFontSize,
-              bold: style.headerFontBold,
-              underline: true,
-              color: { argb: 'FF0000FF' } // 蓝色
-            };
-            continue;
-          }
-
-          // 如果是Excel文件，将第一个sheet的内容复制到月份sheet
-          if (fileWorkbook && fileWorkbook.worksheets.length > 0) {
-            const sourceSheet = fileWorkbook.worksheets[0];
-            const startRow = monthSheet.rowCount + 1;
-
-            // 添加文件名行
-            const fileNameRow = monthSheet.addRow([fileName]);
-            fileNameRow.height = 22 * 0.75;
-            this.excelUtils.applyCellStyle(fileNameRow.getCell(1), style, 'header');
-            monthSheet.mergeCells(monthSheet.rowCount, 1, monthSheet.rowCount, 10);
-
-            // 复制数据
-            for (let rowNum = 1; rowNum <= sourceSheet.rowCount; rowNum++) {
-              const sourceRow = sourceSheet.getRow(rowNum);
-              if (!sourceRow || sourceRow.cellCount === 0) continue;
-
-              const rowData: any[] = [];
-              sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-                const cellValue = this.excelUtils.getCellValueWithFormula(cell, sourceSheet, rowNum, colNumber);
-                rowData.push(cellValue || '');
-              });
-
-              const targetRow = monthSheet.addRow(rowData);
-              targetRow.height = sourceRow.height || 20 * 0.75;
-
-              // 复制样式
-              sourceRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-                const targetCell = targetRow.getCell(colNumber);
-                if (cell.font) targetCell.font = { ...cell.font };
-                if (cell.fill) targetCell.fill = { ...cell.fill };
-                if (cell.alignment) targetCell.alignment = { ...cell.alignment };
-                if (cell.border) targetCell.border = { ...cell.border };
-                if (cell.numFmt) targetCell.numFmt = cell.numFmt;
-              });
-            }
-          }
-        } catch (error) {
-          console.error(`读取zip文件失败: ${zipFilePath}`, error);
-          continue;
-        }
-
-        // 修改基础sheet中该单元格的超链接，指向月份sheet的第一个单元格
-        const targetCell = newSheet.getRow(baseHeaderRow).getCell(headerColNumber);
-        // Excel sheet名称如果包含特殊字符需要用单引号包裹
-        const sheetName = month.includes(' ') || month.includes('-') || month.includes('[') || month.includes(']')
-          ? `'${month.replace(/'/g, "''")}'`
-          : month;
-        targetCell.value = {
-          text: headerValueStr,
-          hyperlink: `#${sheetName}!A1`
-        };
-        targetCell.font = {
-          name: style.fontFamily,
-          size: style.headerFontSize,
-          bold: style.headerFontBold,
-          underline: true,
-          color: { argb: 'FF0000FF' } // 蓝色
-        };
-      }
-
-      // 自动调整列宽
-      this.excelUtils.autoFitColumns(newSheet, baseSheet.columnCount || sortedHeaders.length);
-    }
   }
 
   // 填充汇总表数据
